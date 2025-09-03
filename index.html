@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Curling Throw — D3.js (Horizontal Sheet)</title>
+<style>
+  :root {
+    --bg: #0c1a2b;
+    --ice: #eaf3ff;
+    --line: #16324f;
+    --hog: #b41e2a;
+    --house-blue: #2a69b8;
+    --house-red: #b41e2a;
+    --stone: #888;
+    --handle: #f7b500;
+  }
+  body { margin: 0; font: 14px system-ui, sans-serif; background: var(--bg); color: #e6eef8; }
+  header { padding: 8px 12px; display: flex; gap: 16px; align-items: center; border-bottom: 1px solid #22364f; }
+  select, button { background: #0f2338; color: #e6eef8; border: 1px solid #284867; border-radius: 6px; padding: 4px 8px; }
+  button { cursor: pointer; }
+  svg { width: 100%; height: 85vh; background: var(--ice); display: block; }
+  .hog { stroke: var(--hog); stroke-width: 3; }
+  .center { stroke: var(--line); stroke-dasharray: 6 6; stroke-width: 2; }
+  .house-blue { fill: none; stroke: var(--house-blue); stroke-width: 3; }
+  .house-red { fill: none; stroke: var(--house-red); stroke-width: 3; }
+  .stone { fill: var(--stone); stroke: #444; stroke-width: 1; }
+  .handle { fill: var(--handle); stroke: #a87700; stroke-width: 1; }
+  .path { fill: none; stroke: #2a69b8; stroke-width: 2; }
+  .broom { stroke: #333; stroke-width: 4; }
+  .broom-head { fill: #333; }
+  .overlay { fill: transparent; cursor: crosshair; }
+</style>
+</head>
+<body>
+<header>
+  <label>Weight
+    <select id="weight">
+      <option value="0.90">Guard</option>
+      <option value="1.00" selected>T-Line Draw</option>
+      <option value="1.30">Hack</option>
+      <option value="1.70">Control</option>
+      <option value="2.20">Peel</option>
+    </select>
+  </label>
+  <label>Ice Speed (hog–hog draw time)
+    <select id="ice">
+      <option>13.0</option>
+      <option>13.5</option>
+      <option selected>14.5</option>
+      <option>15.5</option>
+    </select> s
+  </label>
+  <button id="throwBtn">Throw</button>
+  <button id="clearBtn">Clear</button>
+  <span>Click to place broom at far hog line</span>
+</header>
+
+<svg id="svg" viewBox="0 0 1000 400"></svg>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+(function() {
+  // Dimensions (m)
+  const SHEET_L = 21.95; // hog–hog
+  const HOG_TO_TEE = 6.40;
+  const HOUSE_RADII = [1.829, 1.219, 0.610, 0.152];
+  const STONE_R = 0.145;
+
+  const svg = d3.select("#svg");
+  const width = 1000, height = 400;
+  const margin = {top: 20, bottom: 20, left: 20, right: 20};
+
+  // Scale: X is ice length, Y is sheet width
+  const xScale = d3.scaleLinear().domain([0, SHEET_L + HOG_TO_TEE + 2]).range([margin.left, width - margin.right]);
+  const yScale = d3.scaleLinear().domain([-2.5, 2.5]).range([height - margin.bottom, margin.top]);
+
+  const g = svg.append("g");
+  const gLines = g.append("g");
+  const gHouse = g.append("g");
+  const gBroom = g.append("g");
+  const gPath = g.append("g");
+  const gStone = g.append("g");
+
+  // Hog lines
+  gLines.append("line").attr("class", "hog")
+    .attr("x1", xScale(0)).attr("x2", xScale(0))
+    .attr("y1", yScale(-2.5)).attr("y2", yScale(2.5));
+  gLines.append("line").attr("class", "hog")
+    .attr("x1", xScale(SHEET_L)).attr("x2", xScale(SHEET_L))
+    .attr("y1", yScale(-2.5)).attr("y2", yScale(2.5));
+  // Center line
+  gLines.append("line").attr("class", "center")
+    .attr("x1", xScale(0)).attr("x2", xScale(SHEET_L + HOG_TO_TEE + 2))
+    .attr("y1", yScale(0)).attr("y2", yScale(0));
+
+  // House
+  HOUSE_RADII.forEach((r,i)=>{
+    gHouse.append("circle")
+      .attr("class", i%2===0?"house-blue":"house-red")
+      .attr("cx", xScale(SHEET_L))
+      .attr("cy", yScale(0))
+      .attr("r", Math.abs(yScale(0)-yScale(r)));
+  });
+
+  // Broom
+  let broomY = 0;
+  function drawBroom() {
+    gBroom.selectAll("*").remove();
+    gBroom.append("line").attr("class","broom")
+      .attr("x1", xScale(SHEET_L)).attr("x2", xScale(SHEET_L))
+      .attr("y1", yScale(broomY-0.5)).attr("y2", yScale(broomY+0.5));
+    gBroom.append("rect").attr("class","broom-head")
+      .attr("x", xScale(SHEET_L)-6).attr("y", yScale(broomY)-10)
+      .attr("width", 12).attr("height", 20);
+  }
+
+  svg.append("rect").attr("class","overlay")
+    .attr("x",xScale(0)).attr("y",yScale(2.5))
+    .attr("width",xScale(SHEET_L)-xScale(0)).attr("height",yScale(-2.5)-yScale(2.5))
+    .on("click",(ev)=>{
+      const [px,py]=d3.pointer(ev);
+      broomY=yScale.invert(py);
+      drawBroom();
+    });
+
+  // Stone
+  const stone = gStone.append("circle")
+    .attr("class","stone")
+    .attr("r", Math.abs(yScale(0)-yScale(STONE_R)))
+    .attr("cx", xScale(0)).attr("cy", yScale(0));
+
+  // Path
+  const path = gPath.append("path").attr("class","path");
+
+  function throwStone() {
+    path.attr("d","");
+    let x=0, y=0;
+    const iceTime=parseFloat(document.getElementById("ice").value);
+    const weight=parseFloat(document.getElementById("weight").value);
+    const v0= (SHEET_L/iceTime)*weight; // crude calibration
+    let vx=v0, vy=(broomY-y)/SHEET_L*v0;
+    let t=0, dt=0.05;
+
+    function step() {
+      x+=vx*dt; y+=vy*dt;
+      vx*=0.995; vy*=0.995;
+      stone.attr("cx", xScale(x)).attr("cy", yScale(y));
+      path.attr("d", (path.attr("d")||`M${xScale(0)},${yScale(0)}`)+` L${xScale(x)},${yScale(y)}`);
+      if(x<SHEET_L+HOG_TO_TEE) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  document.getElementById("throwBtn").addEventListener("click", throwStone);
+  document.getElementById("clearBtn").addEventListener("click", ()=>{path.attr("d",""); stone.attr("cx",xScale(0)).attr("cy",yScale(0));});
+})();
+</script>
+</body>
+</html>
