@@ -29,13 +29,13 @@ def path_xy(mu, C, n, beta, y0, kappa, t_hog, N=1000):
     curvature = (C / (v**n)) * (1.0 + beta*logistic)
     x = np.cumsum((curvature[:-1] + curvature[1:]) * 0.5 * (y[1]-y[0]))
     x = np.concatenate([[0.0], x])
-    return x, y  # x = curl (in), y = down-ice (ft)
+    return y, x
 
 def error(params):
     mu, C, n, beta, y0, kappa = params
     err = 0.0
     for t_hog, target in anchors.items():
-        x, y = path_xy(mu, C, n, beta, y0, kappa, t_hog)
+        y, x = path_xy(mu, C, n, beta, y0, kappa, t_hog)
         x_tee = np.interp(y_tee, y, x)
         err += (x_tee - target)**2
     return err
@@ -51,17 +51,16 @@ print("Fitted params:", res.x)
 # Plot fitted paths
 plt.figure(figsize=(9,6))
 for t_hog in anchors.keys():
-    x, y = path_xy(mu, C, n, beta, y0, kappa, t_hog)
-    plt.plot(x, y, label=f"{t_hog:.1f}s")
+    y, x = path_xy(mu, C, n, beta, y0, kappa, t_hog)
+    plt.plot(y, x/12.0, label=f"{t_hog:.1f}s")  # <-- convert to feet
     # Mark anchor point at tee
     x_tee = np.interp(y_tee, y, x)
-    plt.scatter([x_tee], [y_tee], marker='o', color='k')
+    plt.scatter([y_tee], [x_tee/12.0], marker='o', color='k')  # <-- convert to feet
 
-plt.axhline(y_tee, color='gray', linestyle='--')
-plt.text(0.5, y_tee+0.5, "Tee", va='bottom')
-
-plt.ylabel("Down-ice distance (ft)")
-plt.xlabel("Curl offset (inches)")
+plt.axvline(y_tee, color='gray', linestyle='--')
+plt.text(y_tee, 0, "Tee", rotation=90, va='bottom', ha='right')
+plt.xlabel("Down-ice distance (ft)")
+plt.ylabel("Curl offset (ft)")  # <-- now in feet
 plt.title("Velocity-based Curling Stone Model (fitted to anchors)")
 plt.legend()
 plt.grid(True)
