@@ -166,7 +166,7 @@ export default class SheetRenderer {
   }
   
   // Draw a path from trajectory points
-  drawPath(trajectory, color) {
+  drawPath(trajectory, color, isMultiPath = false) {
     const svg = this.svg;
     const xScale = this.xScale;
     const yScale = this.yScale;
@@ -176,15 +176,81 @@ export default class SheetRenderer {
       .y(d => yScale(d.y));
     
     return svg.append("path")
-      .attr("class", "path")
+      .attr("class", isMultiPath ? "path path-visualization" : "path")
       .attr("d", line(trajectory))
-      .style("stroke", color)
-      .style("stroke-width", 2);
+      .style("stroke", color || "#1f2b38")
+      .style("stroke-width", isMultiPath ? 2.5 : 2);
+  }
+  
+  // Draw multiple paths with transparency
+  drawMultiplePaths(pathsData) {
+    // Clear existing paths first
+    this.clearPaths();
+    
+    // Group for all paths
+    const pathsGroup = this.svg.append("g")
+      .attr("class", "paths-group");
+    
+    // Draw each trajectory
+    pathsData.forEach(pathData => {
+      this.drawPath(pathData.trajectory, pathData.color, true);
+    });
+    
+    return pathsGroup;
   }
   
   // Clear all paths
   clearPaths() {
     this.svg.selectAll(".path").remove();
+    this.svg.selectAll(".velocity-legend").remove();
+  }
+  
+  // Draw velocity legend
+  drawVelocityLegend(pathDetails) {
+    // Remove any existing legends
+    this.svg.selectAll(".velocity-legend").remove();
+    
+    // Create legend container
+    const legend = this.svg.append("g")
+      .attr("class", "velocity-legend")
+      .attr("transform", `translate(${this.M.l + 10}, ${this.M.t + 10})`);
+    
+    // Add title
+    legend.append("text")
+      .attr("class", "velocity-legend-title")
+      .attr("x", 0)
+      .attr("y", 0)
+      .text("Shot Parameters");
+    
+    // Add color boxes and labels for each velocity and spin direction
+    pathDetails.forEach((detail, i) => {
+      // Draw color box
+      legend.append("rect")
+        .attr("x", 0)
+        .attr("y", 15 + i * 20)
+        .attr("width", 15)
+        .attr("height", 15)
+        .attr("fill", detail.color);
+      
+      // Add text label
+      const labelText = typeof detail.velocity === 'number' ? 
+        `${detail.velocity.toFixed(1)} m/s${detail.spinDirection ? ' - ' + detail.spinDirection : ''}` : 
+        `${detail.velocity}${detail.spinDirection ? ' - ' + detail.spinDirection : ''}`;
+      
+      legend.append("text")
+        .attr("x", 20)
+        .attr("y", 15 + i * 20 + 12)
+        .text(labelText);
+    });
+    
+    // Add a note about broom positions
+    legend.append("text")
+      .attr("x", 0)
+      .attr("y", 15 + pathDetails.length * 20 + 15)
+      .attr("font-size", "10px")
+      .text("Broom positions shown at specified spacing");
+    
+    return legend;
   }
   
   // Remove all stones

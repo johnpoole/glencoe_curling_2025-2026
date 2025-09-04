@@ -34,9 +34,19 @@
           <select id="turn"><option value="out">out (CW)</option><option value="in">in (CCW)</option></select>
         </label>
       </div>
-      <label>Sweep factor (×)
+      <label>Initial Sweep factor (×)
         <input id="sweep" type="number" step="0.01" min="0.5" max="1.5" value="1.0">
       </label>
+      <div id="sweepControlsContainer" style="display: none; margin-top: 10px;">
+        <div class="row" style="align-items: center;">
+          <span>Active Sweeping</span>
+          <div class="slider-container">
+            <input id="activeSweep" type="range" step="0.01" min="0.5" max="1.0" value="0.75">
+            <span class="slider-value" id="activeSweep-value">0.75</span>
+          </div>
+        </div>
+        <div class="small" style="margin-top: 5px;">Press and hold the spacebar to sweep during shot</div>
+      </div>
       <div style="text-align: right; margin-top: 10px;">
         <button id="settingsBtn" class="secondary" title="Advanced Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -68,6 +78,47 @@
           <button id="clearStonesBtn" class="warn">Clear All</button>
         </div>
         <div class="small" style="margin-top:8px">Stones are added automatically when you click Throw. Click a stone to select it for throwing or removing.</div>
+      </fieldset>
+      
+      <fieldset style="margin-top: 20px; border: 2px solid #4aa3ff;">
+        <legend style="font-weight: bold; color: #4aa3ff;">Shot Exploration</legend>
+        <div class="buttons">
+          <button id="showPathsBtn" class="secondary">Show Multiple Paths</button>
+          <button id="hidePathsBtn" class="secondary">Hide Paths</button>
+        </div>
+        <div class="controls">
+          <div class="control-group">
+            <label for="broomSpacing">Broom Spacing (m):</label>
+            <input type="number" id="broomSpacing" value="0.1524" step="0.0254" min="0.0254" max="0.5">
+            <div class="small">(0.0254m = 1 inch)</div>
+          </div>
+          <div class="control-group">
+            <label for="velocityStart">Velocity Start (m/s):</label>
+            <input type="number" id="velocityStart" value="1.8" step="0.1" min="1.0" max="3.0">
+          </div>
+          <div class="control-group">
+            <label for="velocityEnd">Velocity End (m/s):</label>
+            <input type="number" id="velocityEnd" value="2.8" step="0.1" min="1.0" max="3.0">
+          </div>
+          <div class="control-group">
+            <label for="velocityStep">Velocity Step (m/s):</label>
+            <input type="number" id="velocityStep" value="0.1" step="0.05" min="0.05" max="0.5">
+          </div>
+          <div class="control-group" style="margin-top: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="showCollisions" checked>
+              <label for="showCollisions" style="display: inline; margin: 0;">Show Collision Paths</label>
+            </div>
+          </div>
+          <div class="control-group">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="filterPaths" checked>
+              <label for="filterPaths" style="display: inline; margin: 0;">Filter Invalid Paths</label>
+            </div>
+            <div class="small">Only show paths that stop on the sheet or cause collisions</div>
+          </div>
+        </div>
+        <div class="small" style="margin-top:8px">Shows trajectories for different broom positions and velocities</div>
       </fieldset>
       
       <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">

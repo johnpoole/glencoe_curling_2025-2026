@@ -19,9 +19,11 @@ export function unit(vx, vy, eps) {
  * Detect collisions between stones in a list
  * @param {Array} stonesList - List of Stone objects
  * @param {Params} params - Physics parameters
+ * @returns {boolean} True if any collision was detected and resolved
  */
 export function detectCollisions(stonesList, params) {
   const twoR = 2 * params.R;  // Diameter - minimum distance between stone centers
+  let collisionOccurred = false;
   
   for (let i = 0; i < stonesList.length; i++) {
     if (!stonesList[i].inPlay) continue;
@@ -38,9 +40,12 @@ export function detectCollisions(stonesList, params) {
       if (distance < twoR) {
         // Stones are colliding - resolve collision
         resolveCollision(stonesList[i], stonesList[j], params);
+        collisionOccurred = true;
       }
     }
   }
+  
+  return collisionOccurred;
 }
 
 /**

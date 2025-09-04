@@ -141,7 +141,7 @@ svg {
 }
 
 .sheet { 
-  fill: #cfe1ee; 
+  fill: #c2d8e8; /* Slightly darker for better contrast with paths */
 }
 
 .broom { 
@@ -187,6 +187,8 @@ svg {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 12px;
+  max-width: 100%;
+  overflow: visible;
 }
 
 .metrics-container {
@@ -203,12 +205,15 @@ svg {
   flex-wrap: wrap;
 }
 
-/* Optional: make all fieldsets same height */
+/* Make all fieldsets properly visible */
 fieldset {
-  height: calc(100% - 20px);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  min-height: fit-content;
+  height: auto;
+  margin-bottom: 15px;
+  overflow: visible;
 }
 
 /* Ensure sheet is the right height for the available width */
@@ -403,4 +408,57 @@ input:checked + .slider:before {
   padding: 15px 20px;
   border-top: 1px solid #223045;
   text-align: right;
+}
+
+/* Shot exploration controls */
+.controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.control-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.control-group label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+  grid-template-columns: 1fr;
+  color: var(--ink); /* Ensure text is visible */
+}
+
+.control-group input {
+  width: 100%;
+  margin-bottom: 2px;
+  background-color: #0e141b;
+  color: var(--ink);
+  border: 1px solid #273449;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+/* Path visualization styles */
+.path-visualization {
+  opacity: 0.8;
+  transition: opacity 0.2s;
+  stroke-linecap: round;
+}
+
+.path-visualization:hover {
+  opacity: 1;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.7));
+}
+
+.velocity-legend {
+  font-size: 12px;
+  fill: #333;
+}
+
+.velocity-legend-title {
+  font-weight: bold;
+  fill: #333;
 }

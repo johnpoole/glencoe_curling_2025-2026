@@ -153,10 +153,17 @@ export function simulateDraw(Vmag, omegaMag, turnStr, p, startPt, broomPt, sheet
 
   let s = new State(0, startPt.x, startPt.y, vx0, vy0, w0);
   const traj = [s];
+  
+  // Track if the stone has stopped
+  let stoneStopped = false;
 
   const N = Math.floor(p.tMax / p.dt);
   for (let step = 0; step < N; step++) {
-    if (Math.hypot(s.vx, s.vy) < p.vStop && Math.abs(s.w) < p.wStop) break;
+    // More precise stopping condition - the stone has truly stopped
+    if (Math.hypot(s.vx, s.vy) < p.vStop && Math.abs(s.w) < p.wStop) {
+      stoneStopped = true;
+      break;
+    }
 
     let Fx = 0, Fy = 0, tau = 0;
 
@@ -202,5 +209,13 @@ export function simulateDraw(Vmag, omegaMag, turnStr, p, startPt, broomPt, sheet
         x < sheetDimensions.XMIN - 0.5 || 
         Math.abs(y) > sheetDimensions.HALF_W + 0.5) break;
   }
+  
+  // Add metadata about whether the stone stopped naturally
+  traj.stoneStopped = stoneStopped;
+  traj.stoppedOnSheet = stoneStopped && 
+    s.x >= sheetDimensions.XMIN && 
+    s.x <= sheetDimensions.XMAX &&
+    Math.abs(s.y) <= sheetDimensions.HALF_W;
+    
   return traj;
 }

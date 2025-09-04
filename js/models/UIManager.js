@@ -15,7 +15,23 @@ export default class UIManager {
       dt: () => +document.getElementById("dt").value,
       tmax: () => +document.getElementById("tmax").value,
       rband: () => +document.getElementById("rband").value,
-      Rrock: () => +document.getElementById("R").value
+      Rrock: () => +document.getElementById("R").value,
+      
+      // Multi-trajectory parameters
+      showMultiTrajectories: () => document.getElementById("showMultiTrajectories") ? 
+        document.getElementById("showMultiTrajectories").checked : false,
+      broomSpacing: () => document.getElementById("broomSpacing") ?
+        +document.getElementById("broomSpacing").value : 0.1524, // Default 6 inches in meters
+      velocityStart: () => document.getElementById("velocityStart") ?
+        +document.getElementById("velocityStart").value : 1.8,
+      velocityEnd: () => document.getElementById("velocityEnd") ?
+        +document.getElementById("velocityEnd").value : 2.8,
+      velocityStep: () => document.getElementById("velocityStep") ?
+        +document.getElementById("velocityStep").value : 0.1,
+      showCollisions: () => document.getElementById("showCollisions") ?
+        document.getElementById("showCollisions").checked : true,
+      filterPaths: () => document.getElementById("filterPaths") ?
+        document.getElementById("filterPaths").checked : true
     };
     
     // Metric display elements
