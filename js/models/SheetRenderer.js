@@ -117,19 +117,52 @@ export default class SheetRenderer {
     const xScale = this.xScale;
     const yScale = this.yScale;
     
-    const stoneElement = svg.append("circle")
-      .attr("class", "stone")
+    // Initialize rotation angle if not set
+    if (stone.rotation === undefined) {
+      stone.rotation = 0;
+    }
+    
+    // Create a group for the stone with its handle
+    const stoneGroup = svg.append("g")
+      .attr("class", "stone-group")
       .attr("id", `stone-${stone.id}`)
+      .attr("transform", `translate(${xScale(stone.x)}, ${yScale(stone.y)}) rotate(${stone.rotation})`);
+    
+    // Add the stone circle
+    const stoneElement = stoneGroup.append("circle")
+      .attr("class", "stone")
       .attr("r", 7)
-      .attr("cx", xScale(stone.x))
-      .attr("cy", yScale(stone.y))
+      .attr("cx", 0)
+      .attr("cy", 0)
       .style("fill", stone.team === 'red' ? "#e74c3c" : "#f1c40f") // Red or yellow team colors
       .style("stroke", "#111")
       .style("stroke-width", 1.5)
       .style("cursor", "pointer")
       .style("stroke-dasharray", isSelected ? "2,2" : "none");
+    
+    // Add the handle (a T-shaped handle with grip at the end)
+    const handleGroup = stoneGroup.append("g")
+      .attr("class", "stone-handle");
+    
+    // Main handle line
+    handleGroup.append("line")
+      .attr("x1", -7)
+      .attr("y1", 0)
+      .attr("x2", 7)
+      .attr("y2", 0)
+      .style("stroke", "#333")
+      .style("stroke-width", 2);
       
-    return stoneElement;
+    // Cross piece at the end of the handle (perpendicular to the main handle)
+    handleGroup.append("line")
+      .attr("x1", 5)
+      .attr("y1", -3)
+      .attr("x2", 5)
+      .attr("y2", 3)
+      .style("stroke", "#333")
+      .style("stroke-width", 2.5);
+      
+    return stoneGroup;
   }
   
   // Draw a path from trajectory points
@@ -156,6 +189,6 @@ export default class SheetRenderer {
   
   // Remove all stones
   clearStones() {
-    this.svg.selectAll(".stone").remove();
+    this.svg.selectAll(".stone-group").remove();
   }
 }

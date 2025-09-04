@@ -66,10 +66,15 @@ export default class GameController {
     
     // Add stones from the array
     this.stones.forEach(stone => {
-      const stoneElement = this.renderer.drawStone(stone, this.selectedStoneId === stone.id);
+      // Make sure rotation is initialized
+      if (stone.rotation === undefined) {
+        stone.rotation = 0;
+      }
+      
+      const stoneGroup = this.renderer.drawStone(stone, this.selectedStoneId === stone.id);
       
       // Add click handler
-      stoneElement.on("click", (event) => {
+      stoneGroup.on("click", (event) => {
         // Select this stone for throwing
         this.selectedStoneId = stone.id;
         this.updateStoneDisplay(); // Update to show selection
@@ -77,14 +82,13 @@ export default class GameController {
       });
       
       // Add drag handler
-      stoneElement.call(d3.drag()
+      stoneGroup.call(d3.drag()
         .on("drag", (event) => {
           // Allow dragging stones to position them
           stone.x = this.renderer.xScale.invert(event.x);
           stone.y = this.renderer.yScale.invert(event.y);
           d3.select(`#stone-${stone.id}`)
-            .attr("cx", this.renderer.xScale(stone.x))
-            .attr("cy", this.renderer.yScale(stone.y));
+            .attr("transform", `translate(${this.renderer.xScale(stone.x)}, ${this.renderer.yScale(stone.y)}) rotate(${stone.rotation || 0})`);
         })
       );
     });
@@ -108,6 +112,7 @@ export default class GameController {
       team: team,
       inPlay: true,
       t: 0,
+      rotation: 0,  // Initialize rotation angle for handle
       toState() {
         return { t: this.t, x: this.x, y: this.y, vx: this.vx, vy: this.vy, w: this.w };
       },
@@ -209,6 +214,7 @@ export default class GameController {
         team: this.currentTeam,
         inPlay: true,
         t: 0,
+        rotation: 0,  // Initialize rotation angle for handle
         toState() {
           return { t: this.t, x: this.x, y: this.y, vx: this.vx, vy: this.vy, w: this.w };
         },
@@ -250,9 +256,13 @@ export default class GameController {
     
     activeStone.vx = this.uiGetters.V0() * dir.ux;
     activeStone.vy = this.uiGetters.V0() * dir.uy;
+    // Set angular velocity - keep the same physics direction, but we'll reverse the visual rotation
     activeStone.w = this.uiGetters.turn() === "in" ? 
       Math.abs(this.uiGetters.omega0()) : 
       -Math.abs(this.uiGetters.omega0());
+    
+    // Reset the stone's rotation to zero for the throw
+    activeStone.rotation = 0;
     
     // Clear previous paths
     this.renderer.clearPaths();
@@ -367,6 +377,17 @@ export default class GameController {
     const stepMS = 1000 * dt; // one sim-step per frame
     let frame = 0;
     
+    // Initialize rotation tracking for each stone
+    Object.entries(trajectories).forEach(([stoneId, traj]) => {
+      if (traj.length > 0) {
+        const stone = this.stones.find(s => s.id == stoneId);
+        if (stone) {
+          stone.rotation = 0; // Reset rotation at the start of each throw
+          stone.w = traj[0].w; // Save initial angular velocity
+        }
+      }
+    });
+    
     this.anim = d3.interval(() => {
       if (frame >= maxFrames) { 
         this.stopAnim();
@@ -374,14 +395,36 @@ export default class GameController {
         return; 
       }
       
-      // Update each stone position
+      // Update each stone position and rotation
       Object.entries(trajectories).forEach(([stoneId, traj]) => {
         if (frame < traj.length) {
           const stoneElem = d3.select(`#stone-${stoneId}`);
           if (!stoneElem.empty()) {
-            stoneElem
-              .attr("cx", this.renderer.xScale(traj[frame].x))
-              .attr("cy", this.renderer.yScale(traj[frame].y));
+            // Find the stone object to get its angular velocity
+            const stone = this.stones.find(s => s.id == stoneId);
+            if (stone) {
+              // Get current frame data
+              const frameState = traj[frame];
+              
+              // Update stone's physical properties
+              stone.x = frameState.x;
+              stone.y = frameState.y;
+              stone.vx = frameState.vx;
+              stone.vy = frameState.vy;
+              stone.w = frameState.w;
+              
+              // Calculate rotation increment since last frame
+              if (frame > 0) {
+                const dt = frameState.t - traj[frame-1].t;
+                
+                // Simply negate the angular velocity to reverse the direction
+                stone.rotation -= frameState.w * dt * 180 / Math.PI;
+              }
+              
+              // Update position and rotation
+              stoneElem
+                .attr("transform", `translate(${this.renderer.xScale(frameState.x)}, ${this.renderer.yScale(frameState.y)}) rotate(${stone.rotation})`);
+            }
           }
         }
       });
