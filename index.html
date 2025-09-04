@@ -1,159 +1,392 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Curling Throw — D3.js (Horizontal Sheet)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Curling Draw Simulator — D3</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   :root {
-    --bg: #0c1a2b;
-    --ice: #eaf3ff;
-    --line: #16324f;
-    --hog: #b41e2a;
-    --house-blue: #2a69b8;
-    --house-red: #b41e2a;
-    --stone: #888;
-    --handle: #f7b500;
+    --bg: #0a0f14;
+    --panel: #121821;
+    --ink: #e6edf3;
+    --muted: #9fb3c8;
+    --accent: #4aa3ff;
+    --accent2: #79d27f;
+    --warn: #ff7b72;
   }
-  body { margin: 0; font: 14px system-ui, sans-serif; background: var(--bg); color: #e6eef8; }
-  header { padding: 8px 12px; display: flex; gap: 16px; align-items: center; border-bottom: 1px solid #22364f; }
-  select, button { background: #0f2338; color: #e6eef8; border: 1px solid #284867; border-radius: 6px; padding: 4px 8px; }
-  button { cursor: pointer; }
-  svg { width: 100%; height: 85vh; background: var(--ice); display: block; }
-  .hog { stroke: var(--hog); stroke-width: 3; }
-  .center { stroke: var(--line); stroke-dasharray: 6 6; stroke-width: 2; }
-  .house-blue { fill: none; stroke: var(--house-blue); stroke-width: 3; }
-  .house-red { fill: none; stroke: var(--house-red); stroke-width: 3; }
-  .stone { fill: var(--stone); stroke: #444; stroke-width: 1; }
-  .handle { fill: var(--handle); stroke: #a87700; stroke-width: 1; }
-  .path { fill: none; stroke: #2a69b8; stroke-width: 2; }
-  .broom { stroke: #333; stroke-width: 4; }
-  .broom-head { fill: #333; }
-  .overlay { fill: transparent; cursor: crosshair; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+  }
+  .wrap { display: grid; grid-template-columns: 360px 1fr; gap: 12px; padding: 12px; }
+  .panel {
+    background: var(--panel); border-radius: 12px; padding: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  fieldset { border: 1px solid #223045; border-radius: 10px; margin: 0 0 10px 0; padding: 10px; }
+  legend { color: var(--muted); padding: 0 6px; }
+  label { display: grid; grid-template-columns: 1fr 100px; gap: 8px; align-items: baseline; margin: 6px 0; }
+  input[type="number"] { width: 100%; box-sizing: border-box; padding: 4px 6px; border-radius: 6px; border: 1px solid #273449; background: #0e141b; color: var(--ink); }
+  select { width: 100%; padding: 4px 6px; border-radius: 6px; border: 1px solid #273449; background: #0e141b; color: var(--ink); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .buttons { display: flex; gap: 8px; }
+  button {
+    background: var(--accent); color: #03264d; border: 0; padding: 8px 10px; border-radius: 10px; cursor: pointer; font-weight: 700;
+  }
+  button.secondary { background: #24344a; color: var(--ink); }
+  button.warn { background: var(--warn); color: #4d0b05; }
+  .small { color: var(--muted); font-size: 12px; }
+  svg { width: 100%; height: 520px; display: block; background: #dfe9f2; border-radius: 12px; }
+  .hog { stroke: #b00; stroke-width: 2; }
+  .tee { stroke: #0b4; stroke-width: 2; }
+  .house { fill: none; stroke-width: 2; }
+  .sheet { fill: #cfe1ee; }
+  .broom { stroke: var(--accent); fill: var(--accent); }
+  .stone { fill: #444; stroke: #111; stroke-width: 1.5; }
+  .path { fill: none; stroke: #1f2b38; stroke-width: 2; }
+  .curl-label { fill: #0b2236; font-weight: 700; }
+  .metric { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+  .metric span.v { font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
-<header>
-  <label>Weight
-    <select id="weight">
-      <option value="0.90">Guard</option>
-      <option value="1.00" selected>T-Line Draw</option>
-      <option value="1.30">Hack</option>
-      <option value="1.70">Control</option>
-      <option value="2.20">Peel</option>
-    </select>
-  </label>
-  <label>Ice Speed (hog–hog draw time)
-    <select id="ice">
-      <option>13.0</option>
-      <option>13.5</option>
-      <option selected>14.5</option>
-      <option>15.5</option>
-    </select> s
-  </label>
-  <button id="throwBtn">Throw</button>
-  <button id="clearBtn">Clear</button>
-  <span>Click to place broom at far hog line</span>
-</header>
+<div class="wrap">
+  <div class="panel">
+    <fieldset>
+      <legend>Shot</legend>
+      <label>Initial speed V0 (m/s)
+        <input id="V0" type="number" step="0.01" min="0.1" max="6" value="3.0">
+      </label>
+      <div class="row">
+        <label>Spin |ω0| (rad/s)
+          <input id="omega0" type="number" step="0.01" min="0" max="5" value="1.45">
+        </label>
+        <label>Turn
+          <select id="turn"><option value="out">out (CW)</option><option value="in">in (CCW)</option></select>
+        </label>
+      </div>
+      <div class="row">
+        <label>μ0
+          <input id="mu0" type="number" step="0.0005" min="0.001" max="0.03" value="0.008">
+        </label>
+        <label>α
+          <input id="alpha" type="number" step="0.0005" min="0.0" max="0.1" value="0.014">
+        </label>
+      </div>
+      <label>Sweep factor (×)
+        <input id="sweep" type="number" step="0.01" min="0.5" max="1.5" value="1.0">
+      </label>
+    </fieldset>
 
-<svg id="svg" viewBox="0 0 1000 400"></svg>
+    <fieldset>
+      <legend>Advanced</legend>
+      <div class="row">
+        <label>segments
+          <input id="segments" type="number" step="1" min="60" max="720" value="180">
+        </label>
+        <label>dt (s)
+          <input id="dt" type="number" step="0.001" min="0.001" max="0.05" value="0.01">
+        </label>
+      </div>
+      <div class="row">
+        <label>t_max (s)
+          <input id="tmax" type="number" step="1" min="5" max="120" value="60">
+        </label>
+        <label>r_band (m)
+          <input id="rband" type="number" step="0.001" min="0.04" max="0.09" value="0.065">
+        </label>
+      </div>
+      <label>R (rock radius, m)
+        <input id="R" type="number" step="0.001" min="0.12" max="0.17" value="0.145">
+      </label>
+      <div class="small">Click on the sheet to place the skip’s broom. Rock won’t move until you press <b>Throw</b>.</div>
+    </fieldset>
 
-<script src="https://d3js.org/d3.v7.min.js"></script>
+    <div class="buttons">
+      <button id="throwBtn">Throw</button>
+      <button id="resetBtn" class="secondary">Reset</button>
+      <button id="csvBtn" class="secondary">Export CSV</button>
+      <button id="stopBtn" class="warn">Stop</button>
+    </div>
+
+    <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
+    <div class="metric"><span>Final x (m)</span><span class="v" id="mx"></span></div>
+    <div class="metric"><span>Final curl y (m)</span><span class="v" id="my"></span></div>
+    <div class="metric"><span>Total time (s)</span><span class="v" id="mt"></span></div>
+    <div class="metric"><span>Hog→Hog time (s)</span><span class="v" id="mhh"></span></div>
+  </div>
+
+  <div class="panel">
+    <svg id="rink"></svg>
+  </div>
+</div>
+
 <script>
-(function() {
-  // Dimensions (m)
-  const SHEET_L = 21.95; // hog–hog
-  const HOG_TO_TEE = 6.40;
-  const HOUSE_RADII = [1.829, 1.219, 0.610, 0.152];
-  const STONE_R = 0.145;
+/*** Geometry (meters) ***/
+const SHEET_W = 4.75;            // sheet width
+const HALF_W = SHEET_W / 2;
+const HOG_TO_HOG = 21.95;
+const HOG_TO_TEE = 6.40;
+const HOUSE_R12 = 1.829;         // 12 ft radius
+const HOUSE_R8  = 1.219;         // 8 ft
+const HOUSE_R4  = 0.610;         // 4 ft
+const BUTTON_R  = 0.15;
 
-  const svg = d3.select("#svg");
-  const width = 1000, height = 400;
-  const margin = {top: 20, bottom: 20, left: 20, right: 20};
+// Visible x-range: from near hog (0) to a bit past far house
+const XMIN = 0;
+const XMAX = HOG_TO_HOG + HOG_TO_TEE + HOUSE_R12 + 1.3; // ~30 m
+const TEE_X = HOG_TO_HOG + HOG_TO_TEE;
+const FAR_HOG_X = HOG_TO_HOG;
 
-  // Scale: X is ice length, Y is sheet width
-  const xScale = d3.scaleLinear().domain([0, SHEET_L + HOG_TO_TEE + 2]).range([margin.left, width - margin.right]);
-  const yScale = d3.scaleLinear().domain([-2.5, 2.5]).range([height - margin.bottom, margin.top]);
+/*** UI / SVG setup ***/
+const svg = d3.select("#rink");
+const W = svg.node().clientWidth;
+const H = svg.node().clientHeight;
+const M = {t:16, r:24, b:16, l:24};
 
-  const g = svg.append("g");
-  const gLines = g.append("g");
-  const gHouse = g.append("g");
-  const gBroom = g.append("g");
-  const gPath = g.append("g");
-  const gStone = g.append("g");
+const xScale = d3.scaleLinear().domain([XMIN, XMAX]).range([M.l, W - M.r]);
+const yScale = d3.scaleLinear().domain([-HALF_W, HALF_W]).range([H - M.b, M.t]);
 
-  // Hog lines
-  gLines.append("line").attr("class", "hog")
-    .attr("x1", xScale(0)).attr("x2", xScale(0))
-    .attr("y1", yScale(-2.5)).attr("y2", yScale(2.5));
-  gLines.append("line").attr("class", "hog")
-    .attr("x1", xScale(SHEET_L)).attr("x2", xScale(SHEET_L))
-    .attr("y1", yScale(-2.5)).attr("y2", yScale(2.5));
-  // Center line
-  gLines.append("line").attr("class", "center")
-    .attr("x1", xScale(0)).attr("x2", xScale(SHEET_L + HOG_TO_TEE + 2))
-    .attr("y1", yScale(0)).attr("y2", yScale(0));
+// Sheet background
+svg.append("rect")
+  .attr("class", "sheet")
+  .attr("x", xScale(XMIN)).attr("y", yScale(HALF_W))
+  .attr("width", xScale(XMAX) - xScale(XMIN))
+  .attr("height", yScale(-HALF_W) - yScale(HALF_W));
 
-  // House
-  HOUSE_RADII.forEach((r,i)=>{
-    gHouse.append("circle")
-      .attr("class", i%2===0?"house-blue":"house-red")
-      .attr("cx", xScale(SHEET_L))
-      .attr("cy", yScale(0))
-      .attr("r", Math.abs(yScale(0)-yScale(r)));
-  });
+// Hog lines and tee line
+svg.append("line").attr("class","hog")
+  .attr("x1", xScale(0)).attr("y1", yScale(-HALF_W))
+  .attr("x2", xScale(0)).attr("y2", yScale(HALF_W));
+svg.append("line").attr("class","hog")
+  .attr("x1", xScale(FAR_HOG_X)).attr("y1", yScale(-HALF_W))
+  .attr("x2", xScale(FAR_HOG_X)).attr("y2", yScale(HALF_W));
+svg.append("line").attr("class","tee")
+  .attr("x1", xScale(TEE_X)).attr("y1", yScale(-HALF_W))
+  .attr("x2", xScale(TEE_X)).attr("y2", yScale(HALF_W));
 
-  // Broom
-  let broomY = 0;
-  function drawBroom() {
-    gBroom.selectAll("*").remove();
-    gBroom.append("line").attr("class","broom")
-      .attr("x1", xScale(SHEET_L)).attr("x2", xScale(SHEET_L))
-      .attr("y1", yScale(broomY-0.5)).attr("y2", yScale(broomY+0.5));
-    gBroom.append("rect").attr("class","broom-head")
-      .attr("x", xScale(SHEET_L)-6).attr("y", yScale(broomY)-10)
-      .attr("width", 12).attr("height", 20);
+// House
+const house = svg.append("g");
+house.append("circle").attr("class","house").attr("stroke","#0b4")
+  .attr("cx", xScale(TEE_X)).attr("cy", yScale(0)).attr("r", Math.abs(xScale(TEE_X+HOUSE_R12)-xScale(TEE_X)));
+house.append("circle").attr("class","house").attr("stroke","#1765ff")
+  .attr("cx", xScale(TEE_X)).attr("cy", yScale(0)).attr("r", Math.abs(xScale(TEE_X+HOUSE_R8)-xScale(TEE_X)));
+house.append("circle").attr("class","house").attr("stroke","#c00")
+  .attr("cx", xScale(TEE_X)).attr("cy", yScale(0)).attr("r", Math.abs(xScale(TEE_X+HOUSE_R4)-xScale(TEE_X)));
+house.append("circle").attr("fill","#eee").attr("stroke","#333")
+  .attr("cx", xScale(TEE_X)).attr("cy", yScale(0)).attr("r", Math.abs(xScale(TEE_X+BUTTON_R)-xScale(TEE_X)));
+
+// Start location: near hog centerline
+const start = { x: 0.2, y: 0 }; // 20 cm to right of near hog line
+
+// Broom marker
+const broom = svg.append("g").attr("class","broom");
+let broomPos = { x: TEE_X, y: 0 }; // default on the button
+broom.append("circle").attr("r", 6).attr("cx", xScale(broomPos.x)).attr("cy", yScale(broomPos.y));
+broom.append("line").attr("x1", xScale(broomPos.x)).attr("y1", yScale(broomPos.y - 0.2))
+  .attr("x2", xScale(broomPos.x)).attr("y2", yScale(broomPos.y + 0.2)).attr("stroke-width", 3).attr("stroke", "#4aa3ff");
+
+// Path and stone
+const pathG = svg.append("path").attr("class","path");
+const stone = svg.append("circle").attr("class","stone").attr("r", 7)
+  .attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
+
+// Click to place broom
+svg.on("click", (ev) => {
+  const p = d3.pointer(ev, svg.node());
+  const x = xScale.invert(p[0]);
+  const y = yScale.invert(p[1]);
+  if (x < XMIN || x > XMAX || Math.abs(y) > HALF_W) return;
+  broomPos = { x, y };
+  broom.select("circle").attr("cx", xScale(x)).attr("cy", yScale(y));
+  broom.select("line")
+    .attr("x1", xScale(x)).attr("y1", yScale(y - 0.2))
+    .attr("x2", xScale(x)).attr("y2", yScale(y + 0.2));
+});
+
+// UI getters
+const V0     = () => +document.getElementById("V0").value;
+const omega0 = () => +document.getElementById("omega0").value;
+const turn   = () => document.getElementById("turn").value;
+const mu0    = () => +document.getElementById("mu0").value;
+const alpha  = () => +document.getElementById("alpha").value;
+const sweep  = () => +document.getElementById("sweep").value;
+const segments = () => +document.getElementById("segments").value;
+const dt     = () => +document.getElementById("dt").value;
+const tmax   = () => +document.getElementById("tmax").value;
+const rband  = () => +document.getElementById("rband").value;
+const Rrock  = () => +document.getElementById("R").value;
+
+const mx = document.getElementById("mx");
+const my = document.getElementById("my");
+const mt = document.getElementById("mt");
+const mhh = document.getElementById("mhh");
+
+/*** Physics model (JS port with aim) ***/
+class Params {
+  constructor() {
+    this.m = 19.0;    // kg
+    this.g = 9.81;
+    this.R = Rrock();
+    this.rBand = rband();
+    this.mu0 = mu0() * sweep();
+    this.alpha = alpha();
+    this.segments = segments();
+    this.dt = dt();
+    this.tMax = tmax();
+    this.vStop = 0.01;
+    this.wStop = 0.02;
+    this.vEps = 1e-6;
   }
+}
+class State {
+  constructor(t, x, y, vx, vy, w) { this.t=t; this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.w=w; }
+}
+function unit(vx, vy, eps) {
+  const s = Math.hypot(vx, vy);
+  if (s < eps) return { ux: 0, uy: 0, s: eps };
+  return { ux: vx / s, uy: vy / s, s };
+}
 
-  svg.append("rect").attr("class","overlay")
-    .attr("x",xScale(0)).attr("y",yScale(2.5))
-    .attr("width",xScale(SHEET_L)-xScale(0)).attr("height",yScale(-2.5)-yScale(2.5))
-    .on("click",(ev)=>{
-      const [px,py]=d3.pointer(ev);
-      broomY=yScale.invert(py);
-      drawBroom();
-    });
+/** Simulate with initial velocity vector toward the broom */
+function simulateDraw(Vmag, omegaMag, turnStr, p, startPt, broomPt) {
+  const dir = unit(broomPt.x - startPt.x, broomPt.y - startPt.y, p.vEps);
+  const vx0 = Vmag * dir.ux;
+  const vy0 = Vmag * dir.uy;
+  const w0 = turnStr === "in" ? Math.abs(omegaMag) : -Math.abs(omegaMag);
 
-  // Stone
-  const stone = gStone.append("circle")
-    .attr("class","stone")
-    .attr("r", Math.abs(yScale(0)-yScale(STONE_R)))
-    .attr("cx", xScale(0)).attr("cy", yScale(0));
+  const I = 0.5 * p.m * p.R * p.R;
+  const dN = (p.m * p.g) / p.segments;
+  const phis = Array.from({ length: p.segments }, (_, i) => (2 * Math.PI * i) / p.segments);
+
+  let s = new State(0, startPt.x, startPt.y, vx0, vy0, w0);
+  const traj = [s];
+
+  const N = Math.floor(p.tMax / p.dt);
+  for (let step = 0; step < N; step++) {
+    if (Math.hypot(s.vx, s.vy) < p.vStop && Math.abs(s.w) < p.wStop) break;
+
+    let Fx = 0, Fy = 0, tau = 0;
+
+    for (let phi of phis) {
+      const vlocx = s.vx - s.w * p.rBand * Math.sin(phi);
+      const vlocy = s.vy + s.w * p.rBand * Math.cos(phi);
+      const vmag = Math.hypot(vlocx, vlocy) || p.vEps;
+      const mu = p.mu0 * (1 / Math.sqrt(vmag));
+      const vhatx = vlocx / vmag;
+      const vhaty = vlocy / vmag;
+      const dFx = -(dN * mu) * vhatx;
+      const dFy = -(dN * mu) * vhaty;
+      Fx += dFx; Fy += dFy;
+      tau += p.rBand * (Math.cos(phi) * dFy - Math.sin(phi) * dFx);
+    }
+
+    const Vh = unit(s.vx, s.vy, p.vEps);
+    const Vperp = { x: -Vh.uy, y: Vh.ux };
+    const vRot = Math.max(Math.abs(s.w) * p.rBand, p.vEps);
+    const muP = p.alpha * (p.mu0) * (1 / Math.sqrt(vRot));
+    const FpMag = p.m * p.g * muP;
+    const sgnw = s.w > 0 ? 1 : (s.w < 0 ? -1 : 0);
+
+    Fx += sgnw * FpMag * Vperp.x;
+    Fy += sgnw * FpMag * Vperp.y;
+    tau += -sgnw * FpMag * p.rBand;
+
+    const ax = Fx / p.m;
+    const ay = Fy / p.m;
+    const alphaZ = tau / I;
+
+    const vx = s.vx + p.dt * ax;
+    const vy = s.vy + p.dt * ay;
+    const w  = s.w + p.dt * alphaZ;
+    const x  = s.x + p.dt * vx;
+    const y  = s.y + p.dt * vy;
+
+    s = new State(s.t + p.dt, x, y, vx, vy, w);
+    traj.push(s);
+
+    // Stop if off the visible sheet horizontally
+    if (x > XMAX + 0.5 || x < XMIN - 0.5 || Math.abs(y) > HALF_W + 0.5) break;
+  }
+  return traj;
+}
+
+/*** Run + animate ***/
+let anim = null;
+let lastTraj = [];
+
+function runOnce() {
+  const p = new Params();
+  const traj = simulateDraw(V0(), omega0(), turn(), p, start, broomPos);
+  lastTraj = traj;
 
   // Path
-  const path = gPath.append("path").attr("class","path");
+  const line = d3.line().x(d => xScale(d.x)).y(d => yScale(d.y));
+  pathG.attr("d", line(traj)).attr("stroke", "#1f2b38");
 
-  function throwStone() {
-    path.attr("d","");
-    let x=0, y=0;
-    const iceTime=parseFloat(document.getElementById("ice").value);
-    const weight=parseFloat(document.getElementById("weight").value);
-    const v0= (SHEET_L/iceTime)*weight; // crude calibration
-    let vx=v0, vy=(broomY-y)/SHEET_L*v0;
-    let t=0, dt=0.05;
+  // Metrics
+  const end = traj[traj.length - 1];
+  mx.textContent = end.x.toFixed(2);
+  my.textContent = end.y.toFixed(2);
+  mt.textContent = end.t.toFixed(2);
+  mhh.textContent = hogToHogTime(traj)?.toFixed(2) ?? "—";
 
-    function step() {
-      x+=vx*dt; y+=vy*dt;
-      vx*=0.995; vy*=0.995;
-      stone.attr("cx", xScale(x)).attr("cy", yScale(y));
-      path.attr("d", (path.attr("d")||`M${xScale(0)},${yScale(0)}`)+` L${xScale(x)},${yScale(y)}`);
-      if(x<SHEET_L+HOG_TO_TEE) requestAnimationFrame(step);
+  // Reset stone to start
+  stone.attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
+
+  // Animate
+  stopAnim();
+  const stepMS = 1000 * dt(); // one sim-step per frame; adjust if you want faster draw
+  let i = 0;
+  anim = d3.interval(() => {
+    if (i >= traj.length) { stopAnim(); return; }
+    stone.attr("cx", xScale(traj[i].x)).attr("cy", yScale(traj[i].y));
+    i++;
+  }, stepMS);
+}
+
+function hogToHogTime(traj) {
+  for (let i = 1; i < traj.length; i++) {
+    if (traj[i-1].x <= FAR_HOG_X && traj[i].x >= FAR_HOG_X) {
+      const t0 = traj[i-1], t1 = traj[i];
+      const f = (FAR_HOG_X - t0.x) / (t1.x - t0.x);
+      return t0.t + f * (t1.t - t0.t);
     }
-    requestAnimationFrame(step);
   }
+  return null;
+}
 
-  document.getElementById("throwBtn").addEventListener("click", throwStone);
-  document.getElementById("clearBtn").addEventListener("click", ()=>{path.attr("d",""); stone.attr("cx",xScale(0)).attr("cy",yScale(0));});
-})();
+function stopAnim() { if (anim) { anim.stop(); anim = null; } }
+
+function resetAll() {
+  stopAnim();
+  pathG.attr("d", "");
+  stone.attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
+  mx.textContent = my.textContent = mt.textContent = mhh.textContent = "";
+}
+
+function exportCSV() {
+  if (!lastTraj.length) return;
+  let csv = "t_s,x_m,y_m,vx_mps,vy_mps,omega_radps\n";
+  for (const s of lastTraj) {
+    csv += `${s.t.toFixed(4)},${s.x.toFixed(6)},${s.y.toFixed(6)},${s.vx.toFixed(6)},${s.vy.toFixed(6)},${s.w.toFixed(6)}\n`;
+  }
+  const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "trajectory.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Wire buttons
+document.getElementById("throwBtn").addEventListener("click", runOnce);
+document.getElementById("resetBtn").addEventListener("click", resetAll);
+document.getElementById("csvBtn").addEventListener("click", exportCSV);
+document.getElementById("stopBtn").addEventListener("click", stopAnim);
+
+// Initial draw
+stone.attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
 </script>
 </body>
 </html>
