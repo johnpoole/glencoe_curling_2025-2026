@@ -1,0 +1,271 @@
+:root {
+  --bg: #0a0f14;
+  --panel: #121821;
+  --ink: #e6edf3;
+  --muted: #9fb3c8;
+  --accent: #4aa3ff;
+  --accent2: #79d27f;
+  --warn: #ff7b72;
+}
+
+body {
+  margin: 0; 
+  background: var(--bg); 
+  color: var(--ink);
+  font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+}
+
+.wrap { 
+  display: grid; 
+  grid-template-columns: 1fr; 
+  gap: 12px; 
+  padding: 12px; 
+}
+
+.panel {
+  background: var(--panel); 
+  border-radius: 12px; 
+  padding: 12px; 
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}
+
+fieldset { 
+  border: 1px solid #223045; 
+  border-radius: 10px; 
+  margin: 0 0 10px 0; 
+  padding: 10px; 
+}
+
+legend { 
+  color: var(--muted); 
+  padding: 0 6px; 
+}
+
+label { 
+  display: grid; 
+  grid-template-columns: 1fr 100px; 
+  gap: 8px; 
+  align-items: baseline; 
+  margin: 6px 0; 
+}
+
+input[type="number"] { 
+  width: 100%; 
+  box-sizing: border-box; 
+  padding: 4px 6px; 
+  border-radius: 6px; 
+  border: 1px solid #273449; 
+  background: #0e141b; 
+  color: var(--ink); 
+}
+
+select { 
+  width: 100%; 
+  padding: 4px 6px; 
+  border-radius: 6px; 
+  border: 1px solid #273449; 
+  background: #0e141b; 
+  color: var(--ink); 
+}
+
+.row { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 8px; 
+}
+
+.buttons { 
+  display: flex; 
+  gap: 8px; 
+}
+
+button {
+  background: var(--accent); 
+  color: #03264d; 
+  border: 0; 
+  padding: 8px 10px; 
+  border-radius: 10px; 
+  cursor: pointer; 
+  font-weight: 700;
+}
+
+button.secondary { 
+  background: #24344a; 
+  color: var(--ink); 
+}
+
+button.warn { 
+  background: var(--warn); 
+  color: #4d0b05; 
+}
+
+.small { 
+  color: var(--muted); 
+  font-size: 12px; 
+}
+
+svg { 
+  width: 100%; 
+  height: 520px; 
+  display: block; 
+  background: #dfe9f2; 
+  border-radius: 12px; 
+}
+
+.hog { 
+  stroke: #b00; 
+  stroke-width: 2; 
+}
+
+.tee { 
+  stroke: #0b4; 
+  stroke-width: 2; 
+}
+
+.house { 
+  fill: none; 
+  stroke-width: 2; 
+}
+
+.sheet { 
+  fill: #cfe1ee; 
+}
+
+.broom { 
+  stroke: var(--accent); 
+  fill: var(--accent); 
+}
+
+.stone { 
+  fill: #444; 
+  stroke: #111; 
+  stroke-width: 1.5; 
+}
+
+.path { 
+  fill: none; 
+  stroke: #1f2b38; 
+  stroke-width: 2; 
+}
+
+.curl-label { 
+  fill: #0b2236; 
+  font-weight: 700; 
+}
+
+.metric { 
+  display: grid; 
+  grid-template-columns: 1fr auto; 
+  gap: 6px; 
+}
+
+.metric span.v { 
+  font-variant-numeric: tabular-nums; 
+}
+
+/* Added styles for horizontal layout */
+.controls-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.metrics-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Make buttons better distributed */
+.buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Optional: make all fieldsets same height */
+fieldset {
+  height: calc(100% - 20px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure sheet is the right height for the available width */
+svg {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 6.3 / 1; /* Approximate ratio of a curling sheet length/width */
+}
+
+/* Team selection toggle styles */
+.team-toggle-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  padding: 8px 12px;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 100;
+}
+
+/* Switch styling */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #e74c3c; /* Red when off */
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #f1c40f; /* Yellow when on */
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #f1c40f;
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+.slider.round {
+  border-radius: 26px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}

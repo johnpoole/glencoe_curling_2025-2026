@@ -1,0 +1,47 @@
+/**
+ * UI Manager for handling user inputs and controls
+ */
+export default class UIManager {
+  constructor() {
+    // Create getter functions for UI values
+    this.getters = {
+      V0: () => +document.getElementById("V0").value,
+      omega0: () => +document.getElementById("omega0").value,
+      turn: () => document.getElementById("turn").value,
+      mu0: () => +document.getElementById("mu0").value,
+      alpha: () => +document.getElementById("alpha").value,
+      sweep: () => +document.getElementById("sweep").value,
+      segments: () => +document.getElementById("segments").value,
+      dt: () => +document.getElementById("dt").value,
+      tmax: () => +document.getElementById("tmax").value,
+      rband: () => +document.getElementById("rband").value,
+      Rrock: () => +document.getElementById("R").value
+    };
+    
+    // Metric display elements
+    this.metrics = {
+      mx: document.getElementById("mx"),
+      my: document.getElementById("my"),
+      mt: document.getElementById("mt"),
+      mhh: document.getElementById("mhh")
+    };
+  }
+  
+  // Get all UI getters
+  getUIGetters() {
+    return this.getters;
+  }
+  
+  // Update metric displays
+  updateMetrics(x, y, t, hogToHog) {
+    this.metrics.mx.textContent = x !== undefined ? x.toFixed(2) : "—";
+    this.metrics.my.textContent = y !== undefined ? y.toFixed(2) : "—";
+    this.metrics.mt.textContent = t !== undefined ? t.toFixed(2) : "—";
+    this.metrics.mhh.textContent = hogToHog !== undefined ? hogToHog.toFixed(2) : "—";
+  }
+  
+  // Clear metric displays
+  clearMetrics() {
+    this.updateMetrics();
+  }
+}
