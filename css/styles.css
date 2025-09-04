@@ -49,6 +49,19 @@ label {
   margin: 6px 0; 
 }
 
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.input-label {
+  font-size: 14px;
+  color: var(--ink);
+}
+
 input[type="number"] { 
   width: 100%; 
   box-sizing: border-box; 
@@ -197,6 +210,57 @@ svg {
   width: 100%;
   height: auto;
   aspect-ratio: 6.3 / 1; /* Approximate ratio of a curling sheet length/width */
+}
+
+/* Slider styles */
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%; /* Prevent overflow */
+  box-sizing: border-box;
+}
+
+.slider-container input[type="range"] {
+  flex-grow: 1;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #1e293b;
+  border-radius: 4px;
+  outline: none;
+  padding: 0;
+  margin: 0;
+}
+
+.slider-container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.slider-container input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.slider-value {
+  color: var(--ink);
+  min-width: 32px;
+  max-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
 }
 
 /* Team selection toggle styles */

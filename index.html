@@ -19,9 +19,13 @@
     <!-- First column - Shot parameters -->
     <fieldset>
       <legend>Shot</legend>
-      <label>Initial speed V0 (m/s)
-        <input id="V0" type="number" step="0.01" min="0.1" max="6" value="2.0">
-      </label>
+      <div class="row">
+        <span class="input-label">Throw Weight (m/s)</span>
+        <div class="slider-container">
+          <input id="V0" type="range" step="0.01" min="0.1" max="6" value="2.0">
+          <span class="slider-value" id="V0-value">2.0</span>
+        </div>
+      </div>
       <div class="row">
         <label>Spin |ω0| (rad/s)
           <input id="omega0" type="number" step="0.01" min="0" max="5" value="1.45">

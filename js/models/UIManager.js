@@ -25,6 +25,9 @@ export default class UIManager {
       mt: document.getElementById("mt"),
       mhh: document.getElementById("mhh")
     };
+    
+    // Initialize sliders
+    this.initializeSliders();
   }
   
   // Get all UI getters
@@ -43,5 +46,19 @@ export default class UIManager {
   // Clear metric displays
   clearMetrics() {
     this.updateMetrics();
+  }
+  
+  // Initialize slider event listeners
+  initializeSliders() {
+    // Initial speed slider
+    const speedSlider = document.getElementById("V0");
+    const speedValue = document.getElementById("V0-value");
+    
+    if (speedSlider && speedValue) {
+      // Update value display on input change
+      speedSlider.addEventListener("input", () => {
+        speedValue.textContent = speedSlider.value;
+      });
+    }
   }
 }
