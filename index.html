@@ -19,7 +19,7 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
   }
-  .wrap { display: grid; grid-template-columns: 360px 1fr; gap: 12px; padding: 12px; }
+  .wrap { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; }
   .panel {
     background: var(--panel); border-radius: 12px; padding: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.25);
   }
@@ -47,11 +47,54 @@
   .curl-label { fill: #0b2236; font-weight: 700; }
   .metric { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
   .metric span.v { font-variant-numeric: tabular-nums; }
+  
+  /* Added styles for horizontal layout */
+  .controls-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  
+  .metrics-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+  }
+  
+  /* Make buttons better distributed */
+  .buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  /* Optional: make all fieldsets same height */
+  fieldset {
+    height: calc(100% - 20px);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Ensure sheet is the right height for the available width */
+  svg {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 6.3 / 1; /* Approximate ratio of a curling sheet length/width */
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <!-- Sheet panel first (full width) -->
   <div class="panel">
+    <svg id="rink"></svg>
+  </div>
+  
+  <!-- Controls panel below -->
+  <div class="panel controls-panel">
+    <!-- First column - Shot parameters -->
     <fieldset>
       <legend>Shot</legend>
       <label>Initial speed V0 (m/s)
@@ -102,22 +145,22 @@
       <div class="small">Click on the sheet to place the skip’s broom. Rock won’t move until you press <b>Throw</b>.</div>
     </fieldset>
 
-    <div class="buttons">
-      <button id="throwBtn">Throw</button>
-      <button id="resetBtn" class="secondary">Reset</button>
-      <button id="csvBtn" class="secondary">Export CSV</button>
-      <button id="stopBtn" class="warn">Stop</button>
+    <!-- Third column - Buttons and metrics -->
+    <div>
+      <div class="buttons">
+        <button id="throwBtn">Throw</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+        <button id="csvBtn" class="secondary">Export CSV</button>
+        <button id="stopBtn" class="warn">Stop</button>
+      </div>
+      <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
+      <div class="metrics-container">
+        <div class="metric"><span>Final x (m)</span><span class="v" id="mx"></span></div>
+        <div class="metric"><span>Final curl y (m)</span><span class="v" id="my"></span></div>
+        <div class="metric"><span>Total time (s)</span><span class="v" id="mt"></span></div>
+        <div class="metric"><span>Hog→Hog time (s)</span><span class="v" id="mhh"></span></div>
+      </div>
     </div>
-
-    <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
-    <div class="metric"><span>Final x (m)</span><span class="v" id="mx"></span></div>
-    <div class="metric"><span>Final curl y (m)</span><span class="v" id="my"></span></div>
-    <div class="metric"><span>Total time (s)</span><span class="v" id="mt"></span></div>
-    <div class="metric"><span>Hog→Hog time (s)</span><span class="v" id="mhh"></span></div>
-  </div>
-
-  <div class="panel">
-    <svg id="rink"></svg>
   </div>
 </div>
 
@@ -141,11 +184,29 @@ const FAR_HOG_X = HOG_TO_HOG;
 /*** UI / SVG setup ***/
 const svg = d3.select("#rink");
 const W = svg.node().clientWidth;
+
+// Calculate ideal height based on physical sheet proportions
+const sheetRatio = SHEET_W / (XMAX - XMIN); // Width:Length ratio
+const idealHeight = W * sheetRatio;
+
+// Set SVG height directly
+svg.style("height", idealHeight + "px");
+
 const H = svg.node().clientHeight;
 const M = {t:16, r:24, b:16, l:24};
 
-const xScale = d3.scaleLinear().domain([XMIN, XMAX]).range([M.l, W - M.r]);
-const yScale = d3.scaleLinear().domain([-HALF_W, HALF_W]).range([H - M.b, M.t]);
+// Calculate the pixels per meter based on the x-axis
+const pixelsPerMeter = (W - M.l - M.r) / (XMAX - XMIN);
+const totalSheetWidth = SHEET_W * pixelsPerMeter;
+const yCenter = (H - M.t - M.b) / 2 + M.t;  // Center of available height
+
+const xScale = d3.scaleLinear()
+  .domain([XMIN, XMAX])
+  .range([M.l, W - M.r]);
+
+const yScale = d3.scaleLinear()
+  .domain([-HALF_W, HALF_W])
+  .range([yCenter + totalSheetWidth/2, yCenter - totalSheetWidth/2]);
 
 // Sheet background
 svg.append("rect")
