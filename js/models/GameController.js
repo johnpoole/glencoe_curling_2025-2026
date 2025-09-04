@@ -196,11 +196,15 @@ export default class GameController {
       restitution: 0.8
     };
     
-    // Check if there's a stone of the current team
-    const hasCurrentTeamStone = this.stones.some(stone => stone.team === this.currentTeam);
+    // Check if there's a stone of the current team at the starting line ready to be thrown
+    // Only count stones at the start line (not ones that have already been thrown)
+    const hasCurrentTeamStoneAtStart = this.stones.some(stone => 
+      stone.team === this.currentTeam && 
+      Math.abs(stone.x - this.sheetDimensions.START.x) < 0.1 && 
+      stone.vx === 0 && stone.vy === 0);
     
-    if (this.stones.length === 0 || !hasCurrentTeamStone) {
-      // If no stones placed, or no stone for current team, add one
+    if (this.stones.length === 0 || !hasCurrentTeamStoneAtStart) {
+      // If no stones placed, or no stone for current team at the start, add one
       const offset = this.stones.length * 0.2; // Offset stones to avoid overlap
       const yPos = this.currentTeam === 'red' ? -0.2 - offset : 0.2 + offset;
       
@@ -229,14 +233,47 @@ export default class GameController {
       };
       
       this.stones.push(newStone);
-      this.selectedStoneId = newStone.id;
+      this.selectedStoneId = newStone.id; // Select the new stone
       this.updateStoneDisplay();
+    } else {
+      // Make sure we select a stone at the start position if one exists
+      const startStones = this.stones.filter(stone => 
+        stone.team === this.currentTeam && 
+        Math.abs(stone.x - this.sheetDimensions.START.x) < 0.1 && 
+        stone.vx === 0 && stone.vy === 0);
+      
+      if (startStones.length > 0) {
+        // Select the most recently added stone at the start position
+        this.selectedStoneId = startStones.sort((a, b) => b.id - a.id)[0].id;
+        this.updateStoneDisplay();
+      }
     }
     
-    // Find the selected stone or use the first one
-    const activeStoneIndex = this.selectedStoneId ? 
-      this.stones.findIndex(s => s.id === this.selectedStoneId) : 
-      this.stones.findIndex(s => s.team === this.currentTeam);
+    // Find the selected stone or use the most recently added stone of the current team
+    // First check if the selected stone is valid and belongs to the current team
+    let activeStoneIndex = -1;
+    
+    if (this.selectedStoneId) {
+      const selectedStone = this.stones.find(s => s.id === this.selectedStoneId);
+      if (selectedStone && selectedStone.team === this.currentTeam) {
+        activeStoneIndex = this.stones.findIndex(s => s.id === this.selectedStoneId);
+      }
+    }
+    
+    // If no valid selection, find the most recently added stone of the current team
+    if (activeStoneIndex === -1) {
+      // Find all stones of current team and get the one with the highest ID (most recently added)
+      const currentTeamStones = this.stones.filter(s => s.team === this.currentTeam);
+      if (currentTeamStones.length > 0) {
+        // Sort by ID in descending order and take the first one (highest ID = most recently added)
+        const mostRecentStone = currentTeamStones.sort((a, b) => b.id - a.id)[0];
+        activeStoneIndex = this.stones.findIndex(s => s.id === mostRecentStone.id);
+        
+        // Update the selected stone ID to match this stone
+        this.selectedStoneId = mostRecentStone.id;
+        this.updateStoneDisplay(); // Refresh the display to show the selection
+      }
+    }
     
     if (activeStoneIndex === -1) {
       alert("Please select a stone to throw");
@@ -311,6 +348,10 @@ export default class GameController {
     
     // Switch teams after throwing
     this.currentTeam = this.currentTeam === 'red' ? 'yellow' : 'red';
+    
+    // After switching teams, clear the selected stone
+    // This will cause the next throw to select the most recent stone of the new team
+    this.selectedStoneId = null;
   }
   
   // Run the simulation for all stones
