@@ -153,6 +153,21 @@
         <button id="csvBtn" class="secondary">Export CSV</button>
         <button id="stopBtn" class="warn">Stop</button>
       </div>
+      
+      <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
+      
+      <!-- Stone control buttons -->
+      <fieldset>
+        <legend>Stones</legend>
+        <div class="buttons">
+          <button id="addRedBtn" class="secondary" style="background:#e74c3c;color:#fff">Add Red</button>
+          <button id="addYellowBtn" class="secondary" style="background:#f1c40f;color:#333">Add Yellow</button>
+          <button id="removeStoneBtn" class="secondary">Remove Selected</button>
+          <button id="clearStonesBtn" class="warn">Clear All</button>
+        </div>
+        <div class="small" style="margin-top:8px">Click a stone to select it for throwing or removing.</div>
+      </fieldset>
+      
       <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
       <div class="metrics-container">
         <div class="metric"><span>Final x (m)</span><span class="v" id="mx"></span></div>
@@ -298,15 +313,232 @@ class Params {
     this.vStop = 0.01;
     this.wStop = 0.02;
     this.vEps = 1e-6;
+    this.restitution = 0.8; // Coefficient of restitution for stone-stone collisions
   }
 }
 class State {
   constructor(t, x, y, vx, vy, w) { this.t=t; this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.w=w; }
 }
+
+// Stone class for tracking multiple stones
+class Stone {
+  constructor(id, position = {x: 0, y: 0}, velocity = {vx: 0, vy: 0}, omega = 0, team = 'red') {
+    this.id = id;         // Unique identifier
+    this.x = position.x;
+    this.y = position.y;
+    this.vx = velocity.vx;
+    this.vy = velocity.vy;
+    this.w = omega;       // Angular velocity
+    this.team = team;     // 'red' or 'yellow'
+    this.inPlay = true;   // Flag for stones in play
+    this.t = 0;           // Time tracker
+  }
+  
+  // Create a new state object from this stone
+  toState() {
+    return new State(this.t, this.x, this.y, this.vx, this.vy, this.w);
+  }
+  
+  // Update stone from a state object
+  fromState(state) {
+    this.t = state.t;
+    this.x = state.x;
+    this.y = state.y;
+    this.vx = state.vx;
+    this.vy = state.vy;
+    this.w = state.w;
+  }
+}
+
+// Collection of all stones in play
+const stones = [];
 function unit(vx, vy, eps) {
   const s = Math.hypot(vx, vy);
   if (s < eps) return { ux: 0, uy: 0, s: eps };
   return { ux: vx / s, uy: vy / s, s };
+}
+
+// Collision detection between stones
+function detectCollisions(stonesList, params) {
+  const twoR = 2 * params.R;  // Diameter - minimum distance between stone centers
+  
+  for (let i = 0; i < stonesList.length; i++) {
+    if (!stonesList[i].inPlay) continue;
+    
+    for (let j = i + 1; j < stonesList.length; j++) {
+      if (!stonesList[j].inPlay) continue;
+      
+      // Calculate distance between stone centers
+      const dx = stonesList[j].x - stonesList[i].x;
+      const dy = stonesList[j].y - stonesList[i].y;
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      
+      // Check for collision
+      if (distance < twoR) {
+        // Stones are colliding - resolve collision
+        resolveCollision(stonesList[i], stonesList[j], params);
+      }
+    }
+  }
+}
+
+// Collision resolution using conservation of momentum
+function resolveCollision(stone1, stone2, params) {
+  // Unit vector along collision line
+  const dx = stone2.x - stone1.x;
+  const dy = stone2.y - stone1.y;
+  const distance = Math.sqrt(dx*dx + dy*dy);
+  
+  // Normalize direction vector
+  const nx = dx / distance;
+  const ny = dy / distance;
+  
+  // Relative velocity
+  const dvx = stone2.vx - stone1.vx;
+  const dvy = stone2.vy - stone1.vy;
+  
+  // Project velocity onto collision normal
+  const relativeVelocityAlongNormal = dvx * nx + dvy * ny;
+  
+  // Do not resolve if objects are moving away from each other
+  if (relativeVelocityAlongNormal > 0) return;
+  
+  // Coefficient of restitution (1 = perfect elastic, < 1 = energy loss)
+  const e = params.restitution;
+  
+  // Impulse scalar
+  const j = -(1 + e) * relativeVelocityAlongNormal / 2; // Divide by 2 since both stones have equal mass
+  
+  // Apply impulse
+  stone1.vx -= j * nx;
+  stone1.vy -= j * ny;
+  stone2.vx += j * nx;
+  stone2.vy += j * ny;
+  
+  // Apply angular momentum changes - simplified model
+  // Angular momentum change proportional to cross product of collision normal and impact point
+  const crossFactor = 0.5; // Tuning parameter
+  stone1.w += crossFactor * (nx * stone1.vy - ny * stone1.vx);
+  stone2.w += crossFactor * (nx * stone2.vy - ny * stone2.vx);
+  
+  // Slight position adjustment to prevent stones from sticking
+  const overlap = 2 * params.R - distance;
+  stone1.x -= overlap * nx / 2;
+  stone1.y -= overlap * ny / 2;
+  stone2.x += overlap * nx / 2;
+  stone2.y += overlap * ny / 2;
+}
+
+// Simulate motion for a single stone
+function simulateStone(stone, p, duration, checkCollisions = true) {
+  // Copy the stone's state to work with
+  let s = stone.toState();
+  const traj = [s];
+  
+  const I = 0.5 * p.m * p.R * p.R;
+  const dN = (p.m * p.g) / p.segments;
+  const phis = Array.from({ length: p.segments }, (_, i) => (2 * Math.PI * i) / p.segments);
+  
+  const N = Math.floor(duration / p.dt);
+  for (let step = 0; step < N; step++) {
+    if (Math.hypot(s.vx, s.vy) < p.vStop && Math.abs(s.w) < p.wStop) break;
+    
+    let Fx = 0, Fy = 0, tau = 0;
+    
+    for (let phi of phis) {
+      const vlocx = s.vx - s.w * p.rBand * Math.sin(phi);
+      const vlocy = s.vy + s.w * p.rBand * Math.cos(phi);
+      const vmag = Math.hypot(vlocx, vlocy) || p.vEps;
+      const mu = p.mu0 * (1 / Math.sqrt(vmag));
+      const vhatx = vlocx / vmag;
+      const vhaty = vlocy / vmag;
+      const dFx = -(dN * mu) * vhatx;
+      const dFy = -(dN * mu) * vhaty;
+      Fx += dFx; Fy += dFy;
+      tau += p.rBand * (Math.cos(phi) * dFy - Math.sin(phi) * dFx);
+    }
+    
+    const Vh = unit(s.vx, s.vy, p.vEps);
+    const Vperp = { x: -Vh.uy, y: Vh.ux };
+    const vRot = Math.max(Math.abs(s.w) * p.rBand, p.vEps);
+    const muP = p.alpha * (p.mu0) * (1 / Math.sqrt(vRot));
+    const FpMag = p.m * p.g * muP;
+    const sgnw = s.w > 0 ? 1 : (s.w < 0 ? -1 : 0);
+    
+    Fx += sgnw * FpMag * Vperp.x;
+    Fy += sgnw * FpMag * Vperp.y;
+    tau += -sgnw * FpMag * p.rBand;
+    
+    const ax = Fx / p.m;
+    const ay = Fy / p.m;
+    const alphaZ = tau / I;
+    
+    const vx = s.vx + p.dt * ax;
+    const vy = s.vy + p.dt * ay;
+    const w = s.w + p.dt * alphaZ;
+    const x = s.x + p.dt * vx;
+    const y = s.y + p.dt * vy;
+    
+    s = new State(s.t + p.dt, x, y, vx, vy, w);
+    traj.push(s);
+    
+    // Update the stone's state for collision detection
+    if (checkCollisions) {
+      stone.fromState(s);
+      
+      // Stop if off the visible sheet
+      if (stone.x > XMAX + 0.5 || stone.x < XMIN - 0.5 || Math.abs(stone.y) > HALF_W + 0.5) {
+        stone.inPlay = false;
+        break;
+      }
+    }
+  }
+  
+  // Update the stone with final state
+  stone.fromState(s);
+  
+  return traj;
+}
+
+// Main simulation function for all stones
+function simulateAll(p, duration) {
+  // Initialize trajectories object
+  const trajectories = {};
+  stones.forEach(stone => {
+    trajectories[stone.id] = [];
+  });
+  
+  let time = 0;
+  const timeStep = p.dt; // Use the same timestep as the physics
+  
+  while (time < duration) {
+    // Check if all stones have stopped
+    const allStopped = stones.every(stone => 
+      !stone.inPlay || (Math.hypot(stone.vx, stone.vy) < p.vStop && Math.abs(stone.w) < p.wStop)
+    );
+    
+    if (allStopped) break;
+    
+    // Move each stone for this time step
+    stones.forEach(stone => {
+      if (!stone.inPlay) return;
+      
+      // Simulate a single timestep for this stone
+      const stepTraj = simulateStone(stone, p, timeStep, false);
+      
+      // Record trajectory
+      if (stepTraj.length > 0) {
+        trajectories[stone.id].push(stepTraj[stepTraj.length - 1]);
+      }
+    });
+    
+    // Check for collisions between stones
+    detectCollisions(stones, p);
+    
+    time += timeStep;
+  }
+  
+  return trajectories;
 }
 
 /** Simulate with initial velocity vector toward the broom */
@@ -375,69 +607,245 @@ function simulateDraw(Vmag, omegaMag, turnStr, p, startPt, broomPt) {
 /*** Run + animate ***/
 let anim = null;
 let lastTraj = [];
+let selectedStoneId = null; // Currently selected stone for throwing
+let currentTeam = 'red'; // Track current team ('red' or 'yellow')
 
-function runOnce() {
-  const p = new Params();
-  const traj = simulateDraw(V0(), omega0(), turn(), p, start, broomPos);
-  lastTraj = traj;
-
-  // Path
-  const line = d3.line().x(d => xScale(d.x)).y(d => yScale(d.y));
-  pathG.attr("d", line(traj)).attr("stroke", "#1f2b38");
-
-  // Metrics
-  const end = traj[traj.length - 1];
-  mx.textContent = end.x.toFixed(2);
-  my.textContent = end.y.toFixed(2);
-  mt.textContent = end.t.toFixed(2);
-  mhh.textContent = hogToHogTime(traj)?.toFixed(2) ?? "—";
-
-  // Reset stone to start
-  stone.attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
-
-  // Animate
-  stopAnim();
-  const stepMS = 1000 * dt(); // one sim-step per frame; adjust if you want faster draw
-  let i = 0;
-  anim = d3.interval(() => {
-    if (i >= traj.length) { stopAnim(); return; }
-    stone.attr("cx", xScale(traj[i].x)).attr("cy", yScale(traj[i].y));
-    i++;
-  }, stepMS);
+// Add a function to update stone visuals on the sheet
+function updateStoneDisplay() {
+  // Remove existing stones
+  svg.selectAll(".stone").remove();
+  
+  // Add stones from the array
+  stones.forEach(stone => {
+    svg.append("circle")
+      .attr("class", "stone")
+      .attr("id", `stone-${stone.id}`)
+      .attr("r", 7)
+      .attr("cx", xScale(stone.x))
+      .attr("cy", yScale(stone.y))
+      .style("fill", stone.team === 'red' ? "#e74c3c" : "#f1c40f") // Red or yellow team colors
+      .style("stroke", "#111")
+      .style("stroke-width", 1.5)
+      .style("cursor", "pointer")
+      .style("stroke-dasharray", selectedStoneId === stone.id ? "2,2" : "none") // Highlight selected stone
+      .on("click", (event) => {
+        // Select this stone for throwing
+        selectedStoneId = stone.id;
+        updateStoneDisplay(); // Update to show selection
+      })
+      .call(d3.drag()
+        .on("drag", (event) => {
+          // Allow dragging stones to position them
+          stone.x = xScale.invert(event.x);
+          stone.y = yScale.invert(event.y);
+          d3.select(`#stone-${stone.id}`)
+            .attr("cx", xScale(stone.x))
+            .attr("cy", yScale(stone.y));
+        })
+      );
+  });
 }
 
-function hogToHogTime(traj) {
-  for (let i = 1; i < traj.length; i++) {
-    if (traj[i-1].x <= FAR_HOG_X && traj[i].x >= FAR_HOG_X) {
-      const t0 = traj[i-1], t1 = traj[i];
-      const f = (FAR_HOG_X - t0.x) / (t1.x - t0.x);
-      return t0.t + f * (t1.t - t0.t);
-    }
+// Function to run the multi-stone simulation
+function runOnce() {
+  const p = new Params();
+  
+  if (stones.length === 0) {
+    // If no stones placed, add one at the starting position
+    const newStone = new Stone(
+      1,
+      {x: start.x, y: start.y},
+      {vx: 0, vy: 0},
+      0,
+      currentTeam
+    );
+    stones.push(newStone);
+    selectedStoneId = newStone.id;
+    updateStoneDisplay();
   }
-  return null;
+  
+  // Find the selected stone or use the first one
+  const activeStoneIndex = selectedStoneId ? 
+    stones.findIndex(s => s.id === selectedStoneId) : 
+    stones.findIndex(s => s.team === currentTeam);
+  
+  if (activeStoneIndex === -1) {
+    alert("Please select a stone to throw");
+    return;
+  }
+  
+  const activeStone = stones[activeStoneIndex];
+  
+  // Set velocity and spin for the selected stone
+  const dir = unit(broomPos.x - activeStone.x, broomPos.y - activeStone.y, p.vEps);
+  activeStone.vx = V0() * dir.ux;
+  activeStone.vy = V0() * dir.uy;
+  activeStone.w = turn() === "in" ? Math.abs(omega0()) : -Math.abs(omega0());
+  
+  // Clear previous paths
+  svg.selectAll(".path").remove();
+  
+  // Run the multi-stone simulation
+  const trajectories = simulateAll(p, p.tMax);
+  
+  // Draw paths for all stones that moved
+  Object.entries(trajectories).forEach(([stoneId, traj]) => {
+    if (traj.length > 1) {
+      const line = d3.line().x(d => xScale(d.x)).y(d => yScale(d.y));
+      svg.append("path")
+        .attr("class", "path")
+        .attr("d", line(traj))
+        .style("stroke", stones.find(s => s.id == stoneId).team === 'red' ? "#e74c3c55" : "#f1c40f55")
+        .style("stroke-width", 2);
+    }
+  });
+  
+  // Display metrics for the active stone
+  const stoneId = activeStone.id;
+  const traj = trajectories[stoneId];
+  
+  if (traj && traj.length > 0) {
+    const end = traj[traj.length - 1];
+    mx.textContent = end.x.toFixed(2);
+    my.textContent = end.y.toFixed(2);
+    mt.textContent = end.t.toFixed(2);
+    
+    // Calculate hog-to-hog time if the stone crossed the far hog line
+    let hogToHog = null;
+    for (let i = 1; i < traj.length; i++) {
+      if (traj[i-1].x <= FAR_HOG_X && traj[i].x >= FAR_HOG_X) {
+        const t0 = traj[i-1], t1 = traj[i];
+        const f = (FAR_HOG_X - t0.x) / (t1.x - t0.x);
+        hogToHog = t0.t + f * (t1.t - t0.t);
+        break;
+      }
+    }
+    mhh.textContent = hogToHog !== null ? hogToHog.toFixed(2) : "—";
+  } else {
+    mx.textContent = my.textContent = mt.textContent = mhh.textContent = "—";
+  }
+  
+  // Animate the stones
+  animateStones(trajectories, p.dt);
+  
+  // Switch teams after throwing
+  currentTeam = currentTeam === 'red' ? 'yellow' : 'red';
+}
+
+// Animation function for multiple stones
+function animateStones(trajectories, dt) {
+  stopAnim();
+  
+  // Find the maximum frame count across all trajectories
+  let maxFrames = 0;
+  Object.values(trajectories).forEach(traj => {
+    maxFrames = Math.max(maxFrames, traj.length);
+  });
+  
+  if (maxFrames === 0) return; // No trajectories to animate
+  
+  const stepMS = 1000 * dt; // one sim-step per frame
+  let frame = 0;
+  
+  anim = d3.interval(() => {
+    if (frame >= maxFrames) { 
+      stopAnim();
+      updateStoneDisplay(); // Ensure final positions are shown
+      return; 
+    }
+    
+    // Update each stone position
+    Object.entries(trajectories).forEach(([stoneId, traj]) => {
+      if (frame < traj.length) {
+        const stoneElem = d3.select(`#stone-${stoneId}`);
+        if (!stoneElem.empty()) {
+          stoneElem
+            .attr("cx", xScale(traj[frame].x))
+            .attr("cy", yScale(traj[frame].y));
+        }
+      }
+    });
+    
+    frame++;
+  }, stepMS);
 }
 
 function stopAnim() { if (anim) { anim.stop(); anim = null; } }
 
 function resetAll() {
   stopAnim();
-  pathG.attr("d", "");
-  stone.attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
+  svg.selectAll(".path").remove();
+  stones.length = 0; // Remove all stones
+  updateStoneDisplay();
   mx.textContent = my.textContent = mt.textContent = mhh.textContent = "";
+  currentTeam = 'red'; // Reset to first team
+}
+
+function clearStones() {
+  stopAnim();
+  svg.selectAll(".path").remove();
+  stones.length = 0;
+  updateStoneDisplay();
 }
 
 function exportCSV() {
-  if (!lastTraj.length) return;
-  let csv = "t_s,x_m,y_m,vx_mps,vy_mps,omega_radps\n";
-  for (const s of lastTraj) {
-    csv += `${s.t.toFixed(4)},${s.x.toFixed(6)},${s.y.toFixed(6)},${s.vx.toFixed(6)},${s.vy.toFixed(6)},${s.w.toFixed(6)}\n`;
+  if (stones.length === 0) {
+    alert("No stones to export data for.");
+    return;
   }
+  
+  // Export all stone positions and states
+  let csv = "stone_id,team,t_s,x_m,y_m,vx_mps,vy_mps,omega_radps\n";
+  
+  stones.forEach(stone => {
+    csv += `${stone.id},${stone.team},${stone.t.toFixed(4)},${stone.x.toFixed(6)},${stone.y.toFixed(6)},${stone.vx.toFixed(6)},${stone.vy.toFixed(6)},${stone.w.toFixed(6)}\n`;
+  });
+  
   const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "trajectory.csv";
+  a.href = url; a.download = "stones.csv";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// Generate a unique ID for stones
+function generateStoneId() {
+  return stones.length > 0 ? Math.max(...stones.map(s => s.id)) + 1 : 1;
+}
+
+// Function to add a new stone
+function addStone(team) {
+  // Position new stones in a reasonable location near start
+  const offset = stones.length * 0.2; // Offset stones to avoid overlap
+  const yPos = team === 'red' ? -0.2 - offset : 0.2 + offset;
+  
+  const newStone = new Stone(
+    generateStoneId(),
+    {x: start.x, y: yPos},
+    {vx: 0, vy: 0},
+    0,
+    team
+  );
+  
+  stones.push(newStone);
+  selectedStoneId = newStone.id;
+  updateStoneDisplay();
+}
+
+// Function to remove a selected stone
+function removeSelectedStone() {
+  if (selectedStoneId === null) {
+    alert("Please select a stone to remove");
+    return;
+  }
+  
+  const index = stones.findIndex(s => s.id === selectedStoneId);
+  if (index !== -1) {
+    stones.splice(index, 1);
+    selectedStoneId = stones.length > 0 ? stones[0].id : null;
+    updateStoneDisplay();
+  }
 }
 
 // Wire buttons
@@ -446,8 +854,15 @@ document.getElementById("resetBtn").addEventListener("click", resetAll);
 document.getElementById("csvBtn").addEventListener("click", exportCSV);
 document.getElementById("stopBtn").addEventListener("click", stopAnim);
 
-// Initial draw
-stone.attr("cx", xScale(start.x)).attr("cy", yScale(start.y));
+// Stone control buttons
+document.getElementById("addRedBtn").addEventListener("click", () => addStone('red'));
+document.getElementById("addYellowBtn").addEventListener("click", () => addStone('yellow'));
+document.getElementById("removeStoneBtn").addEventListener("click", removeSelectedStone);
+document.getElementById("clearStonesBtn").addEventListener("click", clearStones);
+
+// Remove the original stone object and initialize the display
+svg.selectAll(".stone").remove();
+updateStoneDisplay();
 </script>
 </body>
 </html>

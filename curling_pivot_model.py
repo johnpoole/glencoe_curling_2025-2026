@@ -223,7 +223,9 @@ def main():
         plt.xlabel("Down-ice x [m]")
         plt.ylabel("Across-ice y [m] (curl)")
         plt.title("Curling draw trajectory")
+        plt.show()
 
+"""
         # Angular velocity
         plt.figure()
         plt.plot(t, w)
@@ -237,8 +239,7 @@ def main():
         plt.xlabel("Time [s]")
         plt.ylabel("Speed [m/s]")
         plt.title("Speed vs time")
-
-        plt.show()
+"""
 
 
 if __name__ == "__main__":
