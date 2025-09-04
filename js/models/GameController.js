@@ -50,8 +50,6 @@ export default class GameController {
     document.getElementById("stopBtn").addEventListener("click", () => this.stopAnim());
     
     // Stone control buttons
-    document.getElementById("addRedBtn").addEventListener("click", () => this.addStone('red'));
-    document.getElementById("addYellowBtn").addEventListener("click", () => this.addStone('yellow'));
     document.getElementById("removeStoneBtn").addEventListener("click", () => this.removeSelectedStone());
     document.getElementById("clearStonesBtn").addEventListener("click", () => this.clearStones());
   }
@@ -193,12 +191,18 @@ export default class GameController {
       restitution: 0.8
     };
     
-    if (this.stones.length === 0) {
-      // If no stones placed, add one at the starting position
+    // Check if there's a stone of the current team
+    const hasCurrentTeamStone = this.stones.some(stone => stone.team === this.currentTeam);
+    
+    if (this.stones.length === 0 || !hasCurrentTeamStone) {
+      // If no stones placed, or no stone for current team, add one
+      const offset = this.stones.length * 0.2; // Offset stones to avoid overlap
+      const yPos = this.currentTeam === 'red' ? -0.2 - offset : 0.2 + offset;
+      
       const newStone = {
-        id: 1,
+        id: this.generateStoneId(),
         x: this.sheetDimensions.START.x,
-        y: this.sheetDimensions.START.y,
+        y: yPos,
         vx: 0,
         vy: 0,
         w: 0,
