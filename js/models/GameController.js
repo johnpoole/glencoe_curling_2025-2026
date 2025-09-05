@@ -1,5 +1,6 @@
 import { detectCollisions } from './Physics.js';
 import { simulateStone, simulateAll, simulateDraw } from './Simulation.js';
+// We'll import the simple evaluator directly in evaluateCurrentPosition
 
 /**
  * Game Controller for managing curling game state and interactions
@@ -238,6 +239,12 @@ export default class GameController {
     });
     
     this.currentTeam = 'red'; // Reset to first team
+    
+    // Clear position evaluation
+    const evalElement = document.getElementById("positionEvaluation");
+    if (evalElement) {
+      evalElement.innerHTML = "";
+    }
   }
   
   // Stop any active animation
@@ -985,6 +992,9 @@ export default class GameController {
     // Switch teams after throwing
     this.currentTeam = this.currentTeam === 'red' ? 'yellow' : 'red';
     
+    // Evaluate the position
+    this.evaluateCurrentPosition();
+    
     if (updateAfter) {
       this.updateGameUI();
     }
@@ -1200,6 +1210,278 @@ export default class GameController {
     
     // Show the scoreboard modal
     document.getElementById("scoreboardModal").style.display = "block";
+  }
+  
+  // Evaluate current stone positions and display the results
+  evaluateCurrentPosition() {
+    if (this.stones.length === 0) return;
+    
+    try {
+      // Import the curlingeval.js module using dynamic import
+      import('../analyze/curlingeval.js').then(module => {
+        // Access evaluatePosition17 function from the module (handle both ESM and CommonJS exports)
+        const evaluatePosition17 = module.evaluatePosition17 || module.default?.evaluatePosition17;
+        
+        // Convert our stone representation to the format expected by evaluatePosition17
+        // evaluatePosition17 expects stones = [["A"|"B", x, y], ...] in Cartesian (m)
+        const stoneData = this.stones.map(stone => {
+          // Convert from sheet coordinates to button-centered coordinates
+          const buttonX = this.renderer.dimensions.TEE_X;
+          const x = stone.x - buttonX;
+          const y = stone.y; // Y is already centered
+          
+          // Convert team names from 'red'/'yellow' to 'A'/'B' for the evaluator
+          const team = stone.team === 'red' ? 'A' : 'B';
+          
+          return [team, x, y]; // Return array format needed by evaluatePosition17
+        });
+        
+        // Determine which team has hammer
+        let hammerTeam = 'A'; // Default to red (A) having hammer in first end
+        
+        if (this.gameState.currentEnd > 1 && this.gameState.endScores.length > 0) {
+          const lastEnd = this.gameState.endScores[this.gameState.endScores.length - 1];
+          if (lastEnd.red > 0) {
+            hammerTeam = 'B'; // Yellow has hammer if red scored in the previous end
+          } else if (lastEnd.yellow > 0) {
+            hammerTeam = 'A'; // Red has hammer if yellow scored in the previous end
+          }
+        }
+        
+        // Get the shot number (0-15)
+        const shotNumber = this.gameState.stonesThrown > 0 ? this.gameState.stonesThrown - 1 : 0;
+        
+        let result;
+        
+        // If all shots are thrown (16), calculate the actual score instead of a prediction
+        if (shotNumber >= 15) { // Note: shotNumber is 0-15, so 15 is the last stone
+          result = this.calculateActualEndResult(stoneData, hammerTeam);
+        } else {
+          // Use the new evaluatePosition17 function
+          result = evaluatePosition17(shotNumber, hammerTeam, stoneData);
+        }
+        
+        // Prepare for display
+        const evalElement = document.getElementById("positionEvaluation");
+        if (!evalElement) return;
+        
+        // Basic UI setup
+        const hammerDisplay = hammerTeam === 'A' ? "Red" : "Yellow";
+        // Convert advantages to percentages instead of showing raw decimal values
+        const redAdvantage = Math.round(Math.max(0, result.advantage.A * 100)) + "%";
+        const yellowAdvantage = Math.round(Math.max(0, result.advantage.B * 100)) + "%";
+        
+        const maxAdvantage = Math.max(Math.abs(result.advantage.A), Math.abs(result.advantage.B));
+        const redWidth = maxAdvantage > 0 ? Math.max(0, result.advantage.A / maxAdvantage * 50) : 0;
+        const yellowWidth = maxAdvantage > 0 ? Math.max(0, result.advantage.B / maxAdvantage * 50) : 0;
+        
+        let headerText = shotNumber >= 15 ? 
+          `End ${this.gameState.currentEnd} Final Result` :
+          `Shot ${Math.min(shotNumber + 1, 16)} / 16, ${hammerDisplay} has hammer`;
+        
+        // Create fresh probability distributions for each team that add up to 100%
+        // In curling, when one team scores, the other team gets 0
+        const redProbs = {}; 
+        const yellowProbs = {};
+        
+        // Initialize with zeros
+        for (let i = 0; i <= 8; i++) {
+          redProbs[i] = 0;
+          yellowProbs[i] = 0;
+        }
+        
+        // Build probabilities directly from buckets17
+        // In curlingeval.js:
+        // - Positive k means hammer team scores k points (non-hammer team scores 0)
+        // - Negative k means non-hammer team scores |k| points (hammer team scores 0)
+        // - Zero means blank end (both teams score 0)
+        
+        // Handle blank end first (k=0)
+        const blankProb = result.buckets17[0] || 0;
+        redProbs[0] += blankProb;
+        yellowProbs[0] += blankProb;
+        
+        // Calculate the sum of red scoring anything and yellow scoring anything
+        let redScoringSum = 0;
+        let yellowScoringSum = 0;
+        
+        // Process non-zero buckets
+        for (let k = -8; k <= 8; k++) {
+          if (k === 0) continue; // Already handled blank end
+          
+          const prob = result.buckets17[k] || 0;
+          if (prob <= 0) continue; // Skip zero probabilities
+          
+          if (hammerTeam === 'A') { // Red has hammer
+            if (k > 0) {
+              // Red (hammer) scores k points
+              redProbs[k] += prob;
+              redScoringSum += prob;
+              // When red scores, yellow must score 0
+            } else {
+              // Yellow (non-hammer) scores |k| points
+              yellowProbs[-k] += prob;
+              yellowScoringSum += prob;
+              // When yellow scores, red must score 0
+            }
+          } else { // Yellow has hammer
+            if (k > 0) {
+              // Yellow (hammer) scores k points
+              yellowProbs[k] += prob;
+              yellowScoringSum += prob;
+              // When yellow scores, red must score 0
+            } else {
+              // Red (non-hammer) scores |k| points
+              redProbs[-k] += prob;
+              redScoringSum += prob;
+              // When red scores, yellow must score 0
+            }
+          }
+        }
+        
+        // Now set the "0" scores to match the opposite team's scoring
+        redProbs[0] = yellowScoringSum + blankProb;
+        yellowProbs[0] = redScoringSum + blankProb;
+        const formatTeamProbs = (rawProbs) => {
+          // Convert to percentages and round
+          const probs = {};
+          let total = 0;
+          
+          // First pass - get integer percentages
+          for (const [score, prob] of Object.entries(rawProbs)) {
+            // Use Math.round to get fair rounding
+            const pct = Math.round(prob * 100);
+            if (pct > 0) { // Only keep non-zero percentages
+              probs[score] = pct;
+              total += pct;
+            }
+          }
+          
+          // Final verification - ensure we add to exactly 100%
+          if (total !== 100 && Object.keys(probs).length > 0) {
+            // Find the largest value to adjust
+            let [largestKey, largestVal] = Object.entries(probs)
+              .sort(([_, a], [__, b]) => b - a)[0];
+              
+            probs[largestKey] += (100 - total);
+          }
+          
+          // Format for display
+          return Object.entries(probs)
+            .sort(([a], [b]) => parseInt(a) - parseInt(b)) // Sort by score (0, 1, 2, etc.)
+            .map(([points, pct]) => `${points}: ${pct}%`)
+            .join(", ");
+        };
+        
+        // Generate display strings
+        const redDisplay = formatTeamProbs(redProbs);
+        const yellowDisplay = formatTeamProbs(yellowProbs);
+        
+        // Create raw buckets17 display
+        const rawBuckets = Object.entries(result.buckets17)
+          .sort(([a], [b]) => parseInt(a) - parseInt(b))
+          .map(([k, v]) => `${k}: ${v.toFixed(3)}`)
+          .join(', ');
+        
+        // Create HTML output
+        evalElement.innerHTML = `
+          <div class="eval-header">${headerText}</div>
+          <div class="team-advantage">
+            <div class="red-advantage" style="width: ${redWidth}%;">${redAdvantage}</div>
+            <div class="yellow-advantage" style="width: ${yellowWidth}%;">${yellowAdvantage}</div>
+          </div>
+          <div class="score-probabilities">
+            <div>Raw buckets17: ${rawBuckets}</div>
+            <div>Red probable scores: ${redDisplay}</div>
+            <div>Yellow probable scores: ${yellowDisplay}</div>
+          </div>
+        `;
+        
+        // Log to console for debugging
+        console.log("=== End " + this.gameState.currentEnd + " Position Evaluation ===");
+        console.log("Shot #" + Math.min(shotNumber + 1, 16) + ", " + hammerDisplay + " has hammer");
+        console.log("Team Advantage - Red: " + redAdvantage + ", Yellow: " + yellowAdvantage);
+        console.log("Red probable scores: " + redDisplay);
+        console.log("Yellow probable scores: " + yellowDisplay);
+      }).catch(error => {
+        console.error("Error loading curling evaluator:", error);
+      });
+    } catch (error) {
+      console.error("Error evaluating position:", error);
+    }
+  }
+  
+  // Calculate the actual end result after all 16 shots have been thrown
+  calculateActualEndResult(stoneData, hammerTeam) {
+    // Get stones in the house
+    const stonesInHouse = stoneData.filter(stone => {
+      const distanceToButton = Math.hypot(stone[1], stone[2]);
+      return distanceToButton <= 1.829; // R_HOUSE = 1.829 meters (6 feet)
+    });
+    
+    // If no stones in the house, it's a blank end (0-0)
+    if (stonesInHouse.length === 0) {
+      // Format like evaluatePosition17 output
+      const buckets = {};
+      for (let i = -8; i <= 8; i++) {
+        buckets[i] = 0;
+      }
+      buckets[0] = 1.0; // 100% chance of a blank end
+      
+      return {
+        advantage: { A: 0, B: 0 },
+        buckets17: buckets
+      };
+    }
+    
+    // Sort stones by distance to button
+    stonesInHouse.sort((a, b) => {
+      const distA = Math.hypot(a[1], a[2]);
+      const distB = Math.hypot(b[1], b[2]);
+      return distA - distB;
+    });
+    
+    // Closest stone determines the scoring team
+    const scoringTeam = stonesInHouse[0][0]; // Team is in first position of array
+    
+    // Count stones of scoring team until we encounter an opposing stone
+    let score = 0;
+    for (const stone of stonesInHouse) {
+      if (stone[0] === scoringTeam) {
+        score++;
+      } else {
+        break;  // Stop counting when we hit the other team's stone
+      }
+    }
+    
+    // Cap score at 8 (although unlikely in real curling)
+    score = Math.min(score, 8);
+    
+    // Format like evaluatePosition17 output with buckets17
+    const buckets = {};
+    for (let i = -8; i <= 8; i++) {
+      buckets[i] = 0;
+    }
+    
+    // If hammer team scored
+    if (scoringTeam === hammerTeam) {
+      buckets[score] = 1.0; // 100% probability of hammer team scoring
+    } else {
+      buckets[-score] = 1.0; // 100% probability of non-hammer team scoring (negative value)
+    }
+    
+    // Set advantage based on who scored
+    let redAdvantage = 0;
+    if (scoringTeam === 'A') {
+      redAdvantage = score * 2; // More advantage for higher scores
+    } else {
+      redAdvantage = -score * 2;
+    }
+    
+    return {
+      advantage: { A: redAdvantage, B: -redAdvantage },
+      buckets17: buckets
+    };
   }
   
   // Simulate a scenario with potential collisions

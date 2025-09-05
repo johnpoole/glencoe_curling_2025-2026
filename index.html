@@ -22,8 +22,8 @@
       <div class="row">
         <span class="input-label">Throw Weight (m/s)</span>
         <div class="slider-container">
-          <input id="V0" type="range" step="0.01" min="0.1" max="6" value="2.0">
-          <span class="slider-value" id="V0-value">2.0</span>
+          <input id="V0" type="range" step="0.01" min="1.76" max="4" value="1.93">
+          <span class="slider-value" id="V0-value">1.93</span>
         </div>
       </div>
       <div class="row">
@@ -175,6 +175,11 @@
         <div class="metric"><span>Final curl y (m)</span><span class="v" id="my"></span></div>
         <div class="metric"><span>Total time (s)</span><span class="v" id="mt"></span></div>
         <div class="metric"><span>Hog→Hog time (s)</span><span class="v" id="mhh"></span></div>
+      </div>
+      
+      <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
+      <div class="position-evaluation" id="positionEvaluation">
+        <!-- Position evaluation results will be displayed here -->
       </div>
     </div>
   </div>
