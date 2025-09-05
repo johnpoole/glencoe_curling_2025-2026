@@ -28,7 +28,7 @@ export default class GameController {
         red: 0,
         yellow: 0
       },
-      throwingOrder: ['red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red'],
+      throwingOrder: ['yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow'],
       endScores: []
     };
     
@@ -238,7 +238,7 @@ export default class GameController {
       document.getElementById(id).textContent = "";
     });
     
-    this.currentTeam = 'red'; // Reset to first team
+    this.currentTeam = 'yellow'; // Reset to first team (non-hammer team throws first)
     
     // Clear position evaluation
     const evalElement = document.getElementById("positionEvaluation");
@@ -1005,7 +1005,10 @@ export default class GameController {
     if (confirm("Are you sure you want to reset the current end?")) {
       this.gameState.stonesThrown = 0;
       this.gameState.stoneNumber = 1;
-      this.currentTeam = 'red'; // Red always starts the end
+      
+      // Get the first team from the throwing order
+      this.currentTeam = this.gameState.throwingOrder[0];
+      
       this.clearStones();
       this.updateGameUI();
     }
@@ -1094,12 +1097,12 @@ export default class GameController {
     this.gameState.stonesThrown = 0;
     this.gameState.stoneNumber = 1;
     
-    // Determine next end's starting team (winner of previous end goes last)
+    // Determine next end's starting team (team without hammer goes first)
     if (redScore > yellowScore) {
-      // Yellow starts if red won
+      // Yellow starts if red scored (red has hammer)
       this.gameState.throwingOrder = ['yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow'];
     } else if (yellowScore > redScore) {
-      // Red starts if yellow won
+      // Red starts if yellow scored (yellow has hammer)
       this.gameState.throwingOrder = ['red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red'];
     }
     // If it's a blank end (0-0), the same team keeps hammer
@@ -1377,23 +1380,99 @@ export default class GameController {
         const redDisplay = formatTeamProbs(redProbs);
         const yellowDisplay = formatTeamProbs(yellowProbs);
         
-        // Create raw buckets17 display
-        const rawBuckets = Object.entries(result.buckets17)
-          .sort(([a], [b]) => parseInt(a) - parseInt(b))
-          .map(([k, v]) => `${k}: ${v.toFixed(3)}`)
-          .join(', ');
+        // Prepare bucket data for histogram
+        const bucketEntries = Object.entries(result.buckets17)
+          .map(([k, v]) => ({ bucket: parseInt(k), value: v }))
+          .sort((a, b) => a.bucket - b.bucket);
+        
+        // Find max value for scaling the histogram
+        const maxBucketValue = Math.max(...bucketEntries.map(entry => entry.value));
+        
+        // Create histogram HTML
+        let histogramHTML = `<div class="bucket-histogram">`;
+        histogramHTML += `<div class="bucket-axis">`;
+        
+        // Generate histogram bars
+        bucketEntries.forEach(entry => {
+          // Scale height relative to maximum (max height 80px)
+          const heightPercent = maxBucketValue > 0 ? (entry.value / maxBucketValue) * 100 : 0;
+          const barHeight = Math.max(1, Math.round(heightPercent * 0.8));
+          
+          // Determine bar color based on bucket value and team colors
+          let barColor = '#888888'; // Default gray for 0 (blank end)
+          
+          // In curlingeval.js:
+          // - Positive buckets: hammer team scores
+          // - Negative buckets: non-hammer team scores (steals)
+          if (hammerTeam === 'A') { // Red has hammer
+            if (entry.bucket < 0) barColor = '#f1c40f'; // Yellow team steals
+            if (entry.bucket > 0) barColor = '#e74c3c'; // Red team scores
+          } else { // Yellow has hammer
+            if (entry.bucket < 0) barColor = '#e74c3c'; // Red team steals
+            if (entry.bucket > 0) barColor = '#f1c40f'; // Yellow team scores
+          }
+          
+          histogramHTML += `
+            <div class="bucket-column">
+              <div class="bucket-value">${entry.value.toFixed(2)}</div>
+              <div class="bucket-bar" style="height: ${barHeight}px; background-color: ${barColor}"></div>
+              <div class="bucket-label">${entry.bucket}</div>
+            </div>
+          `;
+        });
+        
+        histogramHTML += `</div></div>`;
+        
+        // Create histogram styles
+        const histogramStyles = `
+          <style>
+            .bucket-histogram { 
+              margin: 10px 0; 
+              padding: 5px; 
+              background: rgba(0,0,0,0.1);
+              border-radius: 4px;
+            }
+            .bucket-axis { 
+              display: flex; 
+              align-items: flex-end;
+              height: 120px;
+              gap: 2px;
+            }
+            .bucket-column {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+            }
+            .bucket-bar {
+              width: 100%;
+              min-height: 1px;
+              border-radius: 2px 2px 0 0;
+            }
+            .bucket-label {
+              font-size: 10px;
+              margin-top: 2px;
+            }
+            .bucket-value {
+              font-size: 8px;
+              margin-bottom: 2px;
+              height: 12px;
+              overflow: hidden;
+              color: #aaa;
+            }
+          </style>
+        `;
         
         // Create HTML output
         evalElement.innerHTML = `
+          ${histogramStyles}
           <div class="eval-header">${headerText}</div>
           <div class="team-advantage">
             <div class="red-advantage" style="width: ${redWidth}%;">${redAdvantage}</div>
             <div class="yellow-advantage" style="width: ${yellowWidth}%;">${yellowAdvantage}</div>
           </div>
           <div class="score-probabilities">
-            <div>Raw buckets17: ${rawBuckets}</div>
-            <div>Red probable scores: ${redDisplay}</div>
-            <div>Yellow probable scores: ${yellowDisplay}</div>
+            ${histogramHTML}
           </div>
         `;
         
