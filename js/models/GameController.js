@@ -432,7 +432,9 @@ export default class GameController {
               if (frame > 0) {
                 const dt = frameState.t - traj[frame-1].t;
                 
-                // Simply negate the angular velocity to reverse the direction
+                // For the visual rotation, we need to match curling conventions:
+                // In curling, a positive angular velocity (CCW/in-turn) should rotate clockwise visually
+                // and negative angular velocity (CW/out-turn) should rotate counterclockwise visually
                 stone.rotation -= frameState.w * dt * 180 / Math.PI;
               }
               
