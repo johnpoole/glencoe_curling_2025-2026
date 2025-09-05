@@ -5,9 +5,10 @@ import { simulateStone, simulateAll, simulateDraw } from './Simulation.js';
  * Game Controller for managing curling game state and interactions
  */
 export default class GameController {
-  constructor(renderer, uiGetters) {
+  constructor(renderer, uiGetters, uiManager) {
     this.renderer = renderer;
     this.uiGetters = uiGetters;
+    this.uiManager = uiManager;
     this.stones = [];
     this.selectedStoneId = null;
     this.currentTeam = 'red';
@@ -128,6 +129,11 @@ export default class GameController {
   updateStoneDisplay() {
     // Remove existing stones
     this.renderer.clearStones();
+    
+    // Clear metrics display if we're not currently in an animation
+    if (!this.anim && this.uiManager) {
+      this.uiManager.clearMetrics();
+    }
     
     // Add stones from the array
     this.stones.forEach(stone => {
@@ -291,6 +297,44 @@ export default class GameController {
     return trajectories;
   }
   
+  // Calculate metrics at the end of animation
+  calculateFinalMetrics(trajectories) {
+    // We're only interested in the active stone (the one just thrown)
+    const activeStoneId = this.activeStoneId || this.selectedStoneId;
+    if (!activeStoneId) return;
+    
+    const trajectory = trajectories[activeStoneId];
+    if (!trajectory || trajectory.length === 0) return;
+    
+    // Get the final frame data
+    const finalFrame = trajectory[trajectory.length - 1];
+    
+      // Calculate hog-to-hog time
+      let hogToHogTime = null;
+      let hogTime = 0;
+      
+      // Get hog line positions from SheetDimensions
+      const nearHogLine = 0; // Near hog is at x=0
+      const farHogLine = this.renderer.dimensions.FAR_HOG_X;
+      
+      // Find the hog-to-hog time by looking for when the stone crosses the hog lines
+      for (let i = 0; i < trajectory.length; i++) {
+        const frame = trajectory[i];
+        if (frame.x >= nearHogLine && hogTime === 0) {
+          hogTime = frame.t; // First hog line cross time
+        } else if (frame.x >= farHogLine && hogTime > 0) {
+          hogToHogTime = frame.t - hogTime; // Calculate hog-to-hog time
+          break;
+        }
+      }    // Update the metrics in the UI
+    this.uiManager.updateMetrics(
+      finalFrame.x, // Final x position
+      finalFrame.y, // Final y position (curl)
+      finalFrame.t, // Total time
+      hogToHogTime  // Hog-to-hog time
+    );
+  }
+
   // Animate the stones based on trajectories
   animateStones(trajectories, dt) {
     // Force animation speed update from latest UI value
@@ -327,9 +371,41 @@ export default class GameController {
       }
     });
     
-    this.anim = d3.interval(() => {
+      this.anim = d3.interval(() => {
       if (frame >= maxFrames) { 
-        this.stopAnim();
+        // Animation complete - update metrics directly
+        
+        // Get the last thrown stone's trajectory
+        const stoneId = this.activeStoneId || this.selectedStoneId;
+        if (stoneId && trajectories[stoneId] && trajectories[stoneId].length > 0) {
+          const traj = trajectories[stoneId];
+          const lastFrame = traj[traj.length - 1];
+          
+          // Update metrics directly in DOM
+          document.getElementById('mx').textContent = lastFrame.x.toFixed(2);
+          document.getElementById('my').textContent = lastFrame.y.toFixed(2);
+          document.getElementById('mt').textContent = lastFrame.t.toFixed(2);
+          
+          // Calculate hog-to-hog time
+          let hogToHogTime = "—";
+          let firstHogTime = 0;
+          
+          // Get hog line positions from SheetDimensions
+          const nearHogLine = 0; // Near hog is at x=0
+          const farHogLine = this.renderer.dimensions.FAR_HOG_X;
+          
+          for (let i = 0; i < traj.length; i++) {
+            const frame = traj[i];
+            if (frame.x >= nearHogLine && firstHogTime === 0) {
+              firstHogTime = frame.t;
+            } else if (frame.x >= farHogLine && firstHogTime > 0) {
+              hogToHogTime = (frame.t - firstHogTime).toFixed(2);
+              break;
+            }
+          }
+          
+          document.getElementById('mhh').textContent = hogToHogTime;
+        }        this.stopAnim();
         this.updateStoneDisplay(); // Ensure final positions are shown
         return; 
       }
@@ -368,8 +444,15 @@ export default class GameController {
         }
       });
       
-      // Increment by frameSkip to speed up animation appropriately
-      frame += frameSkip;
+      // Calculate next frame based on frame skipping
+      const nextFrame = frame + frameSkip;
+      
+      // If the next frame would go past the end, just go to the last frame
+      if (frame < maxFrames && nextFrame >= maxFrames) {
+        frame = maxFrames - 1; // Set to last valid frame
+      } else {
+        frame += frameSkip;
+      }
     }, stepMS);
   }
   
@@ -778,8 +861,13 @@ export default class GameController {
     const sweep = this.uiGetters.sweep();
     
     // Create a new stone
+    const stoneId = this.generateStoneId();
+    
+    // Save the active stone ID for metrics tracking
+    this.activeStoneId = stoneId;
+    
     const stone = {
-      id: this.generateStoneId(),
+      id: stoneId,
       x: start.x,
       y: 0,
       vx: 0,
@@ -850,6 +938,36 @@ export default class GameController {
         const stoneColor = this.stones.find(s => s.id == stoneId).team === 'red' ? 
           "#e74c3c55" : "#f1c40f55";
         this.renderer.drawPath(traj, stoneColor);
+        
+        // Update metrics for the stone that was just thrown
+        if (stoneId == this.activeStoneId && traj.length > 0) {
+          const lastFrame = traj[traj.length - 1];
+          
+          // Update metrics directly in DOM
+          document.getElementById('mx').textContent = lastFrame.x.toFixed(2);
+          document.getElementById('my').textContent = lastFrame.y.toFixed(2);
+          document.getElementById('mt').textContent = lastFrame.t.toFixed(2);
+          
+          // Calculate hog-to-hog time
+          let hogToHogTime = "—";
+          let firstHogTime = 0;
+          
+          // Get hog line positions from SheetDimensions
+          const nearHogLine = 0; // Near hog is at x=0
+          const farHogLine = this.renderer.dimensions.FAR_HOG_X; // Far hog line from dimensions
+          
+          for (let i = 0; i < traj.length; i++) {
+            const frame = traj[i];
+            if (frame.x >= nearHogLine && firstHogTime === 0) {
+              firstHogTime = frame.t;
+            } else if (frame.x >= farHogLine && firstHogTime > 0) {
+              hogToHogTime = (frame.t - firstHogTime).toFixed(2);
+              break;
+            }
+          }
+          
+          document.getElementById('mhh').textContent = hogToHogTime;
+        }
       }
     });
     

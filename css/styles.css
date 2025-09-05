@@ -94,29 +94,17 @@ select {
 
 .preset-buttons {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
 .preset-btn {
-  background-color: #24344a;
-  color: var(--ink);
-  font-size: 12px;
-  padding: 5px 8px;
-  margin: 2px;
+  padding: 8px 12px;
   border-radius: 6px;
   border: none;
   cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.preset-btn:hover {
-  background-color: #354c6d;
-}
-
-.preset-btn.speed-btn {
   font-weight: bold;
+  transition: background-color 0.2s;
 }
 
 #presetVeryFast {

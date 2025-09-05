@@ -189,26 +189,10 @@
     </div>
     <div class="modal-body">
       <fieldset>
-        <legend>Presets</legend>
-        <div>
-          <h4>Animation Speed</h4>
-          <div class="preset-buttons">
-            <button id="presetVeryFast" class="preset-btn speed-btn">VERY FAST</button>
-            <button id="presetSlowMotion" class="preset-btn speed-btn">SLOW MOTION</button>
-          </div>
-          
-          <h4>Ice Conditions</h4>
-          <div class="preset-buttons">
-            <button id="presetDefault" class="preset-btn">Default</button>
-            <button id="presetOlympic" class="preset-btn">Olympic Ice</button>
-            <button id="presetWorlds" class="preset-btn">World Championships</button>
-            <button id="presetClub" class="preset-btn">Club Competition</button>
-            <button id="presetGrandSlam" class="preset-btn">Grand Slam</button>
-            <button id="presetMixedDoubles" class="preset-btn">Mixed Doubles</button>
-            <button id="presetSwingy" class="preset-btn">Swingy Ice</button>
-            <button id="presetStraight" class="preset-btn">Straight Ice</button>
-            <button id="presetSlow" class="preset-btn">Slow Pebble</button>
-          </div>
+        <legend>Animation Speed</legend>
+        <div class="preset-buttons">
+          <button id="presetVeryFast" class="preset-btn speed-btn">VERY FAST</button>
+          <button id="presetSlowMotion" class="preset-btn speed-btn">SLOW MOTION</button>
         </div>
       </fieldset>
       
@@ -564,79 +548,6 @@
     
     document.getElementById('presetSlowMotion').addEventListener('click', function() {
       document.getElementById('animationSpeed').value = '1';
-    });
-    
-    // Ice condition presets
-    document.getElementById('presetDefault').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0075';
-      document.getElementById('alpha').value = '0.027';
-      document.getElementById('rband').value = '0.065';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetOlympic').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0065';
-      document.getElementById('alpha').value = '0.025';
-      document.getElementById('rband').value = '0.066';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetWorlds').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0070';
-      document.getElementById('alpha').value = '0.026';
-      document.getElementById('rband').value = '0.065';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetClub').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0080';
-      document.getElementById('alpha').value = '0.028';
-      document.getElementById('rband').value = '0.065';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetGrandSlam').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0068';
-      document.getElementById('alpha').value = '0.027';
-      document.getElementById('rband').value = '0.064';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetMixedDoubles').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0073';
-      document.getElementById('alpha').value = '0.029';
-      document.getElementById('rband').value = '0.064';
-      document.getElementById('animationSpeed').value = '10';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetSwingy').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0080';
-      document.getElementById('alpha').value = '0.035';
-      document.getElementById('rband').value = '0.068';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetStraight').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0070';
-      document.getElementById('alpha').value = '0.018';
-      document.getElementById('rband').value = '0.065';
-      document.getElementById('animationSpeed').value = '8';
-      document.getElementById('segments').value = '180';
-    });
-    
-    document.getElementById('presetSlow').addEventListener('click', function() {
-      document.getElementById('mu0').value = '0.0090';
-      document.getElementById('alpha').value = '0.029';
-      document.getElementById('rband').value = '0.065';
-      document.getElementById('animationSpeed').value = '6';
-      document.getElementById('segments').value = '180';
     });
     
     // Close modals with Escape key and add keyboard shortcuts

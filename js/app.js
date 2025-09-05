@@ -20,5 +20,5 @@ document.addEventListener('DOMContentLoaded', () => {
   const uiManager = new UIManager();
   
   // Create the game controller
-  const gameController = new GameController(renderer, uiManager.getUIGetters());
+  const gameController = new GameController(renderer, uiManager.getUIGetters(), uiManager);
 });
