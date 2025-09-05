@@ -387,6 +387,22 @@ input:checked + .slider:before {
   color: var(--accent);
 }
 
+/* Shot Exploration modal specific styles */
+#shotExplorationModal .modal-header {
+  border-bottom-color: var(--accent);
+}
+
+#shotExplorationModal .modal-footer {
+  border-top-color: var(--accent);
+}
+
+#shotExplorationBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
 .close {
   color: var(--muted);
   font-size: 28px;

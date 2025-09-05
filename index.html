@@ -80,46 +80,20 @@
         <div class="small" style="margin-top:8px">Stones are added automatically when you click Throw. Click a stone to select it for throwing or removing.</div>
       </fieldset>
       
-      <fieldset style="margin-top: 20px; border: 2px solid #4aa3ff;">
-        <legend style="font-weight: bold; color: #4aa3ff;">Shot Exploration</legend>
-        <div class="buttons">
-          <button id="showPathsBtn" class="secondary">Show Multiple Paths</button>
-          <button id="hidePathsBtn" class="secondary">Hide Paths</button>
-        </div>
-        <div class="controls">
-          <div class="control-group">
-            <label for="broomSpacing">Broom Spacing (m):</label>
-            <input type="number" id="broomSpacing" value="0.1524" step="0.0254" min="0.0254" max="0.5">
-            <div class="small">(0.0254m = 1 inch)</div>
-          </div>
-          <div class="control-group">
-            <label for="velocityStart">Velocity Start (m/s):</label>
-            <input type="number" id="velocityStart" value="1.8" step="0.1" min="1.0" max="3.0">
-          </div>
-          <div class="control-group">
-            <label for="velocityEnd">Velocity End (m/s):</label>
-            <input type="number" id="velocityEnd" value="2.8" step="0.1" min="1.0" max="3.0">
-          </div>
-          <div class="control-group">
-            <label for="velocityStep">Velocity Step (m/s):</label>
-            <input type="number" id="velocityStep" value="0.1" step="0.05" min="0.05" max="0.5">
-          </div>
-          <div class="control-group" style="margin-top: 10px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <input type="checkbox" id="showCollisions" checked>
-              <label for="showCollisions" style="display: inline; margin: 0;">Show Collision Paths</label>
-            </div>
-          </div>
-          <div class="control-group">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <input type="checkbox" id="filterPaths" checked>
-              <label for="filterPaths" style="display: inline; margin: 0;">Filter Invalid Paths</label>
-            </div>
-            <div class="small">Only show paths that stop on the sheet or cause collisions</div>
-          </div>
-        </div>
-        <div class="small" style="margin-top:8px">Shows trajectories for different broom positions and velocities</div>
-      </fieldset>
+      <!-- Shot Exploration Button -->
+      <div style="margin-top: 20px; text-align: right;">
+        <button id="shotExplorationBtn" class="secondary" style="background-color: #4aa3ff; color: #03264d;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 18a5 5 0 0 1-10 0"></path>
+            <line x1="12" y1="9" x2="12" y2="2"></line>
+            <line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line>
+            <line x1="1" y1="18" x2="3" y2="18"></line>
+            <line x1="21" y1="18" x2="23" y2="18"></line>
+            <line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line>
+          </svg>
+          Shot Exploration
+        </button>
+      </div>
       
       <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
       <div class="metrics-container">
@@ -181,34 +155,120 @@
   </div>
 </div>
 
+<!-- Shot Exploration Modal -->
+<div id="shotExplorationModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header" style="border-bottom-color: #4aa3ff;">
+      <h3 style="color: #4aa3ff;">Shot Exploration</h3>
+      <span class="close" id="closeShotExploration">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="buttons" style="margin-bottom: 15px;">
+        <button id="showPathsBtn" class="secondary">Show Multiple Paths</button>
+        <button id="hidePathsBtn" class="secondary">Hide Paths</button>
+      </div>
+      
+      <fieldset>
+        <legend>Path Settings</legend>
+        <div class="controls">
+          <div class="control-group">
+            <label for="broomSpacing">Broom Spacing (m):</label>
+            <input type="number" id="broomSpacing" value="0.1524" step="0.0254" min="0.0254" max="0.5">
+            <div class="small">(0.0254m = 1 inch)</div>
+          </div>
+          <div class="control-group">
+            <label for="velocityStart">Velocity Start (m/s):</label>
+            <input type="number" id="velocityStart" value="1.8" step="0.1" min="1.0" max="3.0">
+          </div>
+          <div class="control-group">
+            <label for="velocityEnd">Velocity End (m/s):</label>
+            <input type="number" id="velocityEnd" value="2.8" step="0.1" min="1.0" max="3.0">
+          </div>
+          <div class="control-group">
+            <label for="velocityStep">Velocity Step (m/s):</label>
+            <input type="number" id="velocityStep" value="0.1" step="0.05" min="0.05" max="0.5">
+          </div>
+        </div>
+      </fieldset>
+      
+      <fieldset>
+        <legend>Display Options</legend>
+        <div class="controls">
+          <div class="control-group" style="margin-top: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="showCollisions" checked>
+              <label for="showCollisions" style="display: inline; margin: 0;">Show Collision Paths</label>
+            </div>
+          </div>
+          <div class="control-group">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="filterPaths" checked>
+              <label for="filterPaths" style="display: inline; margin: 0;">Filter Invalid Paths</label>
+            </div>
+            <div class="small">Only show paths that stop on the sheet or cause collisions</div>
+          </div>
+        </div>
+      </fieldset>
+      
+      <div class="small" style="margin-top:15px">
+        Shows trajectories for different broom positions and velocities. Hover over paths to see details.
+      </div>
+    </div>
+    <div class="modal-footer" style="border-top-color: #4aa3ff;">
+      <button id="closeShotExplorationBtn" class="secondary">Close</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="js/app.js"></script>
 <script>
   // Modal functionality
   document.addEventListener('DOMContentLoaded', function() {
-    const modal = document.getElementById('settingsModal');
+    // Settings Modal
+    const settingsModal = document.getElementById('settingsModal');
     const settingsBtn = document.getElementById('settingsBtn');
-    const closeBtn = document.querySelector('.close');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const closeSettingsBtnX = document.querySelector('#settingsModal .close');
     
-    // Open the modal when the settings button is clicked
+    // Shot Exploration Modal
+    const shotExplorationModal = document.getElementById('shotExplorationModal');
+    const shotExplorationBtn = document.getElementById('shotExplorationBtn');
+    const closeShotExplorationBtn = document.getElementById('closeShotExplorationBtn');
+    const closeShotExplorationBtnX = document.querySelector('#shotExplorationModal .close');
+    
+    // Settings Modal Functions
     settingsBtn.addEventListener('click', function() {
-      modal.style.display = 'block';
+      settingsModal.style.display = 'block';
     });
     
-    // Close the modal when the X is clicked
-    closeBtn.addEventListener('click', function() {
-      modal.style.display = 'none';
+    closeSettingsBtnX.addEventListener('click', function() {
+      settingsModal.style.display = 'none';
     });
     
-    // Close the modal when the Close button is clicked
     closeSettingsBtn.addEventListener('click', function() {
-      modal.style.display = 'none';
+      settingsModal.style.display = 'none';
     });
     
-    // Close the modal when clicking outside it
+    // Shot Exploration Modal Functions
+    shotExplorationBtn.addEventListener('click', function() {
+      shotExplorationModal.style.display = 'block';
+    });
+    
+    closeShotExplorationBtnX.addEventListener('click', function() {
+      shotExplorationModal.style.display = 'none';
+    });
+    
+    closeShotExplorationBtn.addEventListener('click', function() {
+      shotExplorationModal.style.display = 'none';
+    });
+    
+    // Close modals when clicking outside them
     window.addEventListener('click', function(event) {
-      if (event.target === modal) {
-        modal.style.display = 'none';
+      if (event.target === settingsModal) {
+        settingsModal.style.display = 'none';
+      }
+      if (event.target === shotExplorationModal) {
+        shotExplorationModal.style.display = 'none';
       }
     });
   });
