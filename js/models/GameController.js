@@ -15,6 +15,21 @@ export default class GameController {
     this.anim = null;
     this.sheetDimensions = renderer.dimensions;
     
+    // Game state management
+    this.gameState = {
+      currentEnd: 1,
+      stonesThrown: 0,
+      stoneNumber: 1,
+      maxStonesPerEnd: 16,
+      manualThrow: false,
+      scores: {
+        red: 0,
+        yellow: 0
+      },
+      throwingOrder: ['red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red'],
+      endScores: []
+    };
+    
     // Create the broom
     this.broom = renderer.createBroom(this.broomPos);
     
@@ -23,6 +38,15 @@ export default class GameController {
     
     // Set up UI event handlers
     this.setupEventHandlers();
+    
+    // Initialize game UI
+    this.updateGameUI();
+    
+    // Make sure UI is updated after a short delay to ensure all values are displayed
+    setTimeout(() => {
+      // Force UI update again after DOM is fully ready
+      this.updateGameUI();
+    }, 200);
   }
   
   setupBroomClickHandler() {
@@ -56,6 +80,43 @@ export default class GameController {
     // Shot exploration buttons
     document.getElementById("showPathsBtn").addEventListener("click", () => this.showMultiplePaths());
     document.getElementById("hidePathsBtn").addEventListener("click", () => this.hidePaths());
+    
+    // Game control buttons
+    document.getElementById("nextThrowBtn").addEventListener("click", () => this.nextThrow());
+    document.getElementById("scoreEndBtn").addEventListener("click", () => this.showScoringUI());
+    document.getElementById("resetEndBtn").addEventListener("click", () => this.resetEnd());
+    document.getElementById("confirmScoreBtn").addEventListener("click", () => this.confirmScore());
+    document.getElementById("autoscoreBtn").addEventListener("click", () => this.autoScoreEnd());
+    document.getElementById("cancelScoreBtn").addEventListener("click", () => this.hideScoringUI());
+    document.getElementById("viewScoreboardBtn").addEventListener("click", () => this.updateScoreboard());
+    
+    // Score buttons
+    document.querySelectorAll(".score-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const team = e.target.dataset.team;
+        const score = e.target.dataset.score;
+        
+        // Clear other selections for this team
+        document.querySelectorAll(`.score-btn[data-team="${team}"]`).forEach(b => {
+          b.classList.remove("selected");
+        });
+        
+        // Select this button
+        e.target.classList.add("selected");
+        
+        // Only one team can score in an end
+        if (score !== "0") {
+          const otherTeam = team === "red" ? "yellow" : "red";
+          document.querySelectorAll(`.score-btn[data-team="${otherTeam}"]`).forEach(b => {
+            if (b.dataset.score !== "0") {
+              b.classList.remove("selected");
+            } else {
+              b.classList.add("selected");
+            }
+          });
+        }
+      });
+    });
   }
   
   // Generate a unique ID for stones
@@ -181,183 +242,6 @@ export default class GameController {
     } 
   }
   
-  // Run the simulation once
-  runOnce() {
-    // Create parameters using the UI values
-    const p = {
-      m: 19.0,
-      g: 9.81,
-      R: this.uiGetters.Rrock(),
-      rBand: this.uiGetters.rband(),
-      mu0: this.uiGetters.mu0() * this.uiGetters.sweep(),
-      alpha: this.uiGetters.alpha(),
-      segments: this.uiGetters.segments(),
-      dt: this.uiGetters.dt(),
-      tMax: this.uiGetters.tmax(),
-      vStop: 0.01,
-      wStop: 0.02,
-      vEps: 1e-6,
-      restitution: 0.8
-    };
-    
-    // Check if there's a stone of the current team at the starting line ready to be thrown
-    // Only count stones at the start line (not ones that have already been thrown)
-    const hasCurrentTeamStoneAtStart = this.stones.some(stone => 
-      stone.team === this.currentTeam && 
-      Math.abs(stone.x - this.sheetDimensions.START.x) < 0.1 && 
-      stone.vx === 0 && stone.vy === 0);
-    
-    if (this.stones.length === 0 || !hasCurrentTeamStoneAtStart) {
-      // If no stones placed, or no stone for current team at the start, add one
-      const offset = this.stones.length * 0.2; // Offset stones to avoid overlap
-      const yPos = this.currentTeam === 'red' ? -0.2 - offset : 0.2 + offset;
-      
-      const newStone = {
-        id: this.generateStoneId(),
-        x: this.sheetDimensions.START.x,
-        y: yPos,
-        vx: 0,
-        vy: 0,
-        w: 0,
-        team: this.currentTeam,
-        inPlay: true,
-        t: 0,
-        rotation: 0,  // Initialize rotation angle for handle
-        toState() {
-          return { t: this.t, x: this.x, y: this.y, vx: this.vx, vy: this.vy, w: this.w };
-        },
-        fromState(state) {
-          this.t = state.t;
-          this.x = state.x;
-          this.y = state.y;
-          this.vx = state.vx;
-          this.vy = state.vy;
-          this.w = state.w;
-        }
-      };
-      
-      this.stones.push(newStone);
-      this.selectedStoneId = newStone.id; // Select the new stone
-      this.updateStoneDisplay();
-    } else {
-      // Make sure we select a stone at the start position if one exists
-      const startStones = this.stones.filter(stone => 
-        stone.team === this.currentTeam && 
-        Math.abs(stone.x - this.sheetDimensions.START.x) < 0.1 && 
-        stone.vx === 0 && stone.vy === 0);
-      
-      if (startStones.length > 0) {
-        // Select the most recently added stone at the start position
-        this.selectedStoneId = startStones.sort((a, b) => b.id - a.id)[0].id;
-        this.updateStoneDisplay();
-      }
-    }
-    
-    // Find the selected stone or use the most recently added stone of the current team
-    // First check if the selected stone is valid and belongs to the current team
-    let activeStoneIndex = -1;
-    
-    if (this.selectedStoneId) {
-      const selectedStone = this.stones.find(s => s.id === this.selectedStoneId);
-      if (selectedStone && selectedStone.team === this.currentTeam) {
-        activeStoneIndex = this.stones.findIndex(s => s.id === this.selectedStoneId);
-      }
-    }
-    
-    // If no valid selection, find the most recently added stone of the current team
-    if (activeStoneIndex === -1) {
-      // Find all stones of current team and get the one with the highest ID (most recently added)
-      const currentTeamStones = this.stones.filter(s => s.team === this.currentTeam);
-      if (currentTeamStones.length > 0) {
-        // Sort by ID in descending order and take the first one (highest ID = most recently added)
-        const mostRecentStone = currentTeamStones.sort((a, b) => b.id - a.id)[0];
-        activeStoneIndex = this.stones.findIndex(s => s.id === mostRecentStone.id);
-        
-        // Update the selected stone ID to match this stone
-        this.selectedStoneId = mostRecentStone.id;
-        this.updateStoneDisplay(); // Refresh the display to show the selection
-      }
-    }
-    
-    if (activeStoneIndex === -1) {
-      alert("Please select a stone to throw");
-      return;
-    }
-    
-    const activeStone = this.stones[activeStoneIndex];
-    
-    // Set velocity and spin for the selected stone
-    const dir = {
-      ux: this.broomPos.x - activeStone.x,
-      uy: this.broomPos.y - activeStone.y
-    };
-    const mag = Math.hypot(dir.ux, dir.uy) || p.vEps;
-    dir.ux /= mag;
-    dir.uy /= mag;
-    
-    activeStone.vx = this.uiGetters.V0() * dir.ux;
-    activeStone.vy = this.uiGetters.V0() * dir.uy;
-    // Set angular velocity - keep the same physics direction, but we'll reverse the visual rotation
-    activeStone.w = this.uiGetters.turn() === "in" ? 
-      Math.abs(this.uiGetters.omega0()) : 
-      -Math.abs(this.uiGetters.omega0());
-    
-    // Reset the stone's rotation to zero for the throw
-    activeStone.rotation = 0;
-    
-    // Clear previous paths
-    this.renderer.clearPaths();
-    
-    // Run the multi-stone simulation
-    const trajectories = this.runSimulation(p);
-    
-    // Draw paths for all stones that moved
-    Object.entries(trajectories).forEach(([stoneId, traj]) => {
-      if (traj.length > 1) {
-        const stoneColor = this.stones.find(s => s.id == stoneId).team === 'red' ? 
-          "#e74c3c55" : "#f1c40f55";
-        this.renderer.drawPath(traj, stoneColor);
-      }
-    });
-    
-    // Display metrics for the active stone
-    const stoneId = activeStone.id;
-    const traj = trajectories[stoneId];
-    
-    if (traj && traj.length > 0) {
-      const end = traj[traj.length - 1];
-      document.getElementById('mx').textContent = end.x.toFixed(2);
-      document.getElementById('my').textContent = end.y.toFixed(2);
-      document.getElementById('mt').textContent = end.t.toFixed(2);
-      
-      // Calculate hog-to-hog time if the stone crossed the far hog line
-      let hogToHog = null;
-      for (let i = 1; i < traj.length; i++) {
-        if (traj[i-1].x <= this.sheetDimensions.FAR_HOG_X && traj[i].x >= this.sheetDimensions.FAR_HOG_X) {
-          const t0 = traj[i-1], t1 = traj[i];
-          const f = (this.sheetDimensions.FAR_HOG_X - t0.x) / (t1.x - t0.x);
-          hogToHog = t0.t + f * (t1.t - t0.t);
-          break;
-        }
-      }
-      document.getElementById('mhh').textContent = hogToHog !== null ? hogToHog.toFixed(2) : "—";
-    } else {
-      ['mx', 'my', 'mt', 'mhh'].forEach(id => {
-        document.getElementById(id).textContent = "—";
-      });
-    }
-    
-    // Animate the stones
-    this.animateStones(trajectories, p.dt);
-    
-    // Switch teams after throwing
-    this.currentTeam = this.currentTeam === 'red' ? 'yellow' : 'red';
-    
-    // After switching teams, clear the selected stone
-    // This will cause the next throw to select the most recent stone of the new team
-    this.selectedStoneId = null;
-  }
-  
   // Run the simulation for all stones
   runSimulation(p) {
     // Initialize trajectories object
@@ -409,6 +293,7 @@ export default class GameController {
   
   // Animate the stones based on trajectories
   animateStones(trajectories, dt) {
+    // Force animation speed update from latest UI value
     this.stopAnim();
     
     // Find the maximum frame count across all trajectories
@@ -419,7 +304,16 @@ export default class GameController {
     
     if (maxFrames === 0) return; // No trajectories to animate
     
-    const stepMS = 1000 * dt; // one sim-step per frame
+    // Get the user-defined animation speed directly from the DOM
+    const animSpeedElement = document.getElementById('animationSpeed');
+    const animSpeed = animSpeedElement ? parseFloat(animSpeedElement.value) : 16;
+    
+    // For very high speeds, we'll skip frames to maintain smoothness
+    const frameSkip = animSpeed > 16 ? Math.floor(animSpeed / 8) : 1;
+    
+    // Calculate step time based on animation speed and frame skipping
+    const stepMS = (1000 * dt) / (animSpeed / frameSkip);
+    
     let frame = 0;
     
     // Initialize rotation tracking for each stone
@@ -448,8 +342,8 @@ export default class GameController {
             // Find the stone object to get its angular velocity
             const stone = this.stones.find(s => s.id == stoneId);
             if (stone) {
-              // Get current frame data
-              const frameState = traj[frame];
+              // Get current frame data with frame skipping for higher speed animations
+              const frameState = traj[Math.min(frame, traj.length - 1)];
               
               // Update stone's physical properties
               stone.x = frameState.x;
@@ -474,7 +368,8 @@ export default class GameController {
         }
       });
       
-      frame++;
+      // Increment by frameSkip to speed up animation appropriately
+      frame += frameSkip;
     }, stepMS);
   }
   
@@ -808,6 +703,383 @@ export default class GameController {
   // Hide all paths
   hidePaths() {
     this.renderer.clearPaths();
+  }
+  
+  // Update the game UI with current state
+  updateGameUI() {
+    // Update current end and stones thrown
+    document.getElementById("currentEndNumber").textContent = this.gameState.currentEnd;
+    document.getElementById("stonesThrown").textContent = this.gameState.stonesThrown;
+    document.getElementById("stoneNumber").textContent = this.gameState.stoneNumber;
+    
+    // Update team to throw
+    const teamToThrowElem = document.getElementById("teamToThrow");
+    if (this.gameState.stonesThrown < this.gameState.maxStonesPerEnd) {
+      const teamIndex = this.gameState.stonesThrown % this.gameState.throwingOrder.length;
+      const teamToThrow = this.gameState.throwingOrder[teamIndex];
+      this.currentTeam = teamToThrow;
+      
+      teamToThrowElem.textContent = teamToThrow === 'red' ? 'Red' : 'Yellow';
+      teamToThrowElem.style.color = teamToThrow === 'red' ? '#e74c3c' : '#f1c40f';
+    }
+    
+    // Update scores
+    document.getElementById("redScore").textContent = this.gameState.scores.red;
+    document.getElementById("yellowScore").textContent = this.gameState.scores.yellow;
+    
+    // Force DOM update
+    requestAnimationFrame(() => {
+      // Re-check values
+      document.getElementById("currentEndNumber").textContent = this.gameState.currentEnd;
+      document.getElementById("stonesThrown").textContent = this.gameState.stonesThrown;
+    });
+  }
+  
+  // Handle the next throw in sequence
+  nextThrow() {
+    if (this.gameState.stonesThrown >= this.gameState.maxStonesPerEnd) {
+      alert("All stones for this end have been thrown. Please score the end.");
+      return;
+    }
+    
+    // Set the correct team
+    const teamIndex = this.gameState.stonesThrown % this.gameState.throwingOrder.length;
+    const teamToThrow = this.gameState.throwingOrder[teamIndex];
+    this.currentTeam = teamToThrow;
+    
+    // Flag to prevent double counting in runOnce
+    this.gameState.manualThrow = false;
+    
+    // Update UI
+    this.updateGameUI();
+    
+    // Throw the stone
+    this.runOnce();
+    
+    // Update UI again
+    this.updateGameUI();
+    
+    // Double-check we have the correct UI state
+    setTimeout(() => {
+      this.updateGameUI();
+    }, 100);
+  }
+  
+  // Override the runOnce method to integrate with game state
+  runOnce() {
+    // If manually throwing outside of game flow, ensure we update the UI after
+    const updateAfter = true;
+    
+    // Run the original throw logic
+    const start = this.sheetDimensions.START;
+    const V0 = this.uiGetters.V0();
+    const omega0 = this.uiGetters.omega0();
+    const turn = this.uiGetters.turn();
+    const sweep = this.uiGetters.sweep();
+    
+    // Create a new stone
+    const stone = {
+      id: this.generateStoneId(),
+      x: start.x,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      w: 0,
+      team: this.currentTeam,
+      inPlay: true,
+      t: 0,
+      rotation: 0,
+      toState() {
+        return { t: this.t, x: this.x, y: this.y, vx: this.vx, vy: this.vy, w: this.w };
+      },
+      fromState(state) {
+        this.t = state.t;
+        this.x = state.x;
+        this.y = state.y;
+        this.vx = state.vx;
+        this.vy = state.vy;
+        this.w = state.w;
+      }
+    };
+    
+    // Add the stone to our array
+    this.stones.push(stone);
+    
+    // Make sure the stone is drawn on the sheet
+    this.updateStoneDisplay();
+    
+    // Create parameters using the UI values
+    const p = {
+      m: 19.0,
+      g: 9.81,
+      R: this.uiGetters.Rrock(),
+      rBand: this.uiGetters.rband(),
+      mu0: this.uiGetters.mu0() * this.uiGetters.sweep(),
+      alpha: this.uiGetters.alpha(),
+      segments: this.uiGetters.segments(),
+      dt: this.uiGetters.dt(),
+      tMax: this.uiGetters.tmax(),
+      vStop: 0.01,
+      wStop: 0.02,
+      vEps: 1e-6,
+      restitution: 0.8
+    };
+    
+    // Setup the throw
+    const dir = {
+      ux: this.broomPos.x - stone.x,
+      uy: this.broomPos.y - stone.y
+    };
+    const mag = Math.hypot(dir.ux, dir.uy) || p.vEps;
+    dir.ux /= mag;
+    dir.uy /= mag;
+    
+    stone.vx = V0 * dir.ux;
+    stone.vy = V0 * dir.uy;
+    stone.w = turn === "in" ? Math.abs(omega0) : -Math.abs(omega0);
+    
+    // Clear previous paths
+    this.renderer.clearPaths();
+    
+    // Run the multi-stone simulation
+    const trajectories = this.runSimulation(p);
+    
+    // Draw paths for all stones that moved
+    Object.entries(trajectories).forEach(([stoneId, traj]) => {
+      if (traj.length > 1) {
+        const stoneColor = this.stones.find(s => s.id == stoneId).team === 'red' ? 
+          "#e74c3c55" : "#f1c40f55";
+        this.renderer.drawPath(traj, stoneColor);
+      }
+    });
+    
+    // Animate the stones
+    this.animateStones(trajectories, p.dt);
+    
+    // Increment stone count in game state
+    if (!this.gameState.manualThrow) {
+      this.gameState.stonesThrown++;
+      this.gameState.stoneNumber = (this.gameState.stoneNumber % 8) + 1;
+    }
+    
+    // Switch teams after throwing
+    this.currentTeam = this.currentTeam === 'red' ? 'yellow' : 'red';
+    
+    if (updateAfter) {
+      this.updateGameUI();
+    }
+  }
+  
+  // Reset the current end
+  resetEnd() {
+    if (confirm("Are you sure you want to reset the current end?")) {
+      this.gameState.stonesThrown = 0;
+      this.gameState.stoneNumber = 1;
+      this.currentTeam = 'red'; // Red always starts the end
+      this.clearStones();
+      this.updateGameUI();
+    }
+  }
+  
+  // Show the scoring UI
+  showScoringUI() {
+    // Only show scoring if we have stones in play
+    if (this.stones.length === 0) {
+      alert("There are no stones to score.");
+      return;
+    }
+    
+    document.getElementById("endScoringDisplay").style.display = "block";
+  }
+  
+  // Hide the scoring UI
+  hideScoringUI() {
+    document.getElementById("endScoringDisplay").style.display = "none";
+    
+    // Clear selections
+    document.querySelectorAll(".score-btn").forEach(btn => {
+      btn.classList.remove("selected");
+    });
+  }
+  
+  // Confirm manually entered score
+  confirmScore() {
+    let redScore = 0;
+    let yellowScore = 0;
+    
+    // Get selected scores
+    const redSelection = document.querySelector(".score-btn[data-team='red'].selected");
+    const yellowSelection = document.querySelector(".score-btn[data-team='yellow'].selected");
+    
+    if (!redSelection && !yellowSelection) {
+      alert("Please select a score for at least one team.");
+      return;
+    }
+    
+    if (redSelection) {
+      redScore = redSelection.dataset.score === "4+" ? 4 : parseInt(redSelection.dataset.score);
+    }
+    
+    if (yellowSelection) {
+      yellowScore = yellowSelection.dataset.score === "4+" ? 4 : parseInt(yellowSelection.dataset.score);
+    }
+    
+    // Check that only one team scored (curling rule)
+    if (redScore > 0 && yellowScore > 0) {
+      alert("Only one team can score in an end.");
+      return;
+    }
+    
+    // Save the score
+    this.saveEndScore(redScore, yellowScore);
+  }
+  
+  // Save the end score and advance to the next end
+  saveEndScore(redScore, yellowScore) {
+    // Update game scores
+    this.gameState.scores.red += redScore;
+    this.gameState.scores.yellow += yellowScore;
+    
+    // Save this end's score
+    this.gameState.endScores.push({
+      end: this.gameState.currentEnd,
+      red: redScore,
+      yellow: yellowScore
+    });
+    
+    // Update the scoreboard with the new score
+    if (this.gameState.currentEnd <= 8) {
+      document.getElementById(`red-end-${this.gameState.currentEnd}`).textContent = 
+        redScore || (yellowScore > 0 ? '0' : '-');
+      document.getElementById(`yellow-end-${this.gameState.currentEnd}`).textContent = 
+        yellowScore || (redScore > 0 ? '0' : '-');
+    }
+    
+    // Update totals
+    document.getElementById("red-total").textContent = this.gameState.scores.red;
+    document.getElementById("yellow-total").textContent = this.gameState.scores.yellow;
+    
+    // Advance to next end
+    this.gameState.currentEnd++;
+    this.gameState.stonesThrown = 0;
+    this.gameState.stoneNumber = 1;
+    
+    // Determine next end's starting team (winner of previous end goes last)
+    if (redScore > yellowScore) {
+      // Yellow starts if red won
+      this.gameState.throwingOrder = ['yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow'];
+    } else if (yellowScore > redScore) {
+      // Red starts if yellow won
+      this.gameState.throwingOrder = ['red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red', 'yellow', 'red'];
+    }
+    // If it's a blank end (0-0), the same team keeps hammer
+    
+    // Show a message with the end score
+    const scoringTeam = redScore > 0 ? 'Red' : (yellowScore > 0 ? 'Yellow' : 'None');
+    const points = redScore > 0 ? redScore : (yellowScore > 0 ? yellowScore : 0);
+    
+    if (points > 0) {
+      alert(`End ${this.gameState.currentEnd - 1} Complete: ${scoringTeam} team scored ${points} point${points !== 1 ? 's' : ''}.`);
+    } else {
+      alert(`End ${this.gameState.currentEnd - 1} Complete: Blank end (0-0).`);
+    }
+    
+    // If this was the final end, show game over message
+    if (this.gameState.currentEnd > 8) {
+      const redTotal = this.gameState.scores.red;
+      const yellowTotal = this.gameState.scores.yellow;
+      const winner = redTotal > yellowTotal ? 'Red' : (yellowTotal > redTotal ? 'Yellow' : 'Tied');
+      
+      setTimeout(() => {
+        alert(`Game Over!\nFinal Score: Red ${redTotal} - ${yellowTotal} Yellow\n${winner === 'Tied' ? 'The game ended in a tie!' : `${winner} team wins!`}`);
+      }, 100);
+    }
+    
+    // Clear the stones and hide scoring UI
+    this.clearStones();
+    this.hideScoringUI();
+    
+    // Update UI
+    this.updateGameUI();
+  }
+  
+  // Automatically score the end based on stone positions
+  autoScoreEnd() {
+    // Get stones in the house
+    const houseCenterX = this.sheetDimensions.TEE_X;
+    const houseCenterY = 0;
+    const houseRadius = this.sheetDimensions.HOUSE_R12;
+    
+    const stonesInHouse = this.stones.filter(stone => {
+      const distanceToButton = Math.hypot(stone.x - houseCenterX, stone.y - houseCenterY);
+      return distanceToButton <= houseRadius;
+    });
+    
+    if (stonesInHouse.length === 0) {
+      alert("No stones in the house. This is a blank end (0-0).");
+      this.saveEndScore(0, 0);
+      return;
+    }
+    
+    // Sort stones by distance to button
+    stonesInHouse.sort((a, b) => {
+      const distA = Math.hypot(a.x - houseCenterX, a.y - houseCenterY);
+      const distB = Math.hypot(b.x - houseCenterX, b.y - houseCenterY);
+      return distA - distB;
+    });
+    
+    // Closest stone determines the scoring team
+    const closestStone = stonesInHouse[0];
+    const scoringTeam = closestStone.team;
+    
+    // Count stones of scoring team until we encounter an opposing stone
+    let score = 0;
+    for (const stone of stonesInHouse) {
+      if (stone.team === scoringTeam) {
+        score++;
+      } else {
+        break;  // Stop counting when we hit the other team's stone
+      }
+    }
+    
+    // Cap score at 8 (although unlikely in real curling)
+    score = Math.min(score, 8);
+    
+    const redScore = scoringTeam === 'red' ? score : 0;
+    const yellowScore = scoringTeam === 'yellow' ? score : 0;
+    
+    // Confirm with user
+    if (confirm(`Auto-scoring result: ${scoringTeam === 'red' ? 'Red' : 'Yellow'} team scores ${score} point${score !== 1 ? 's' : ''}. Confirm?`)) {
+      this.saveEndScore(redScore, yellowScore);
+    }
+  }
+  
+  // Update the scoreboard display
+  updateScoreboard() {
+    // Update individual end scores
+    this.gameState.endScores.forEach(endScore => {
+      const endNumber = endScore.end;
+      if (endNumber <= 8) {  // Only show first 8 ends
+        // Update red score
+        const redCell = document.getElementById(`red-end-${endNumber}`);
+        if (redCell) {
+          redCell.textContent = endScore.red || (endScore.yellow > 0 ? '0' : '-');
+        }
+        
+        // Update yellow score
+        const yellowCell = document.getElementById(`yellow-end-${endNumber}`);
+        if (yellowCell) {
+          yellowCell.textContent = endScore.yellow || (endScore.red > 0 ? '0' : '-');
+        }
+      }
+    });
+    
+    // Update totals
+    document.getElementById("red-total").textContent = this.gameState.scores.red;
+    document.getElementById("yellow-total").textContent = this.gameState.scores.yellow;
+    
+    // Show the scoreboard modal
+    document.getElementById("scoreboardModal").style.display = "block";
   }
   
   // Simulate a scenario with potential collisions

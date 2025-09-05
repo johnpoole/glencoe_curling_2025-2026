@@ -16,6 +16,7 @@ export default class UIManager {
       tmax: () => +document.getElementById("tmax").value,
       rband: () => +document.getElementById("rband").value,
       Rrock: () => +document.getElementById("R").value,
+      animationSpeed: () => +document.getElementById("animationSpeed").value,
       
       // Multi-trajectory parameters
       showMultiTrajectories: () => document.getElementById("showMultiTrajectories") ? 

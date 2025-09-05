@@ -92,6 +92,51 @@ select {
   gap: 8px; 
 }
 
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.preset-btn {
+  background-color: #24344a;
+  color: var(--ink);
+  font-size: 12px;
+  padding: 5px 8px;
+  margin: 2px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.preset-btn:hover {
+  background-color: #354c6d;
+}
+
+.preset-btn.speed-btn {
+  font-weight: bold;
+}
+
+#presetVeryFast {
+  background-color: #0066cc;
+  color: white;
+}
+
+#presetVeryFast:hover {
+  background-color: #0077ee;
+}
+
+#presetSlowMotion {
+  background-color: #cc7700;
+  color: white;
+}
+
+#presetSlowMotion:hover {
+  background-color: #dd8800;
+}
+
 button {
   background: var(--accent); 
   color: #03264d; 
@@ -491,4 +536,209 @@ input:checked + .slider:before {
 .velocity-legend-title {
   font-weight: bold;
   fill: #333;
+}
+
+/* Game play and scoring styles */
+.game-state-info {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.state-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.team-indicator {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 15px 0;
+}
+
+.team-name {
+  font-weight: bold;
+  text-align: center;
+  width: 100px;
+}
+
+.team-name.red {
+  color: #e74c3c;
+}
+
+.team-name.yellow {
+  color: #f1c40f;
+}
+
+.score-display {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.score-box {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 6px;
+}
+
+.score-box.red {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.score-box.yellow {
+  background-color: #f1c40f;
+  color: #333;
+}
+
+/* Scoring interface */
+.scoring-result {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  gap: 10px;
+}
+
+.team-label {
+  font-weight: bold;
+  width: 70px;
+  text-align: right;
+}
+
+.team-label.red {
+  color: #e74c3c;
+}
+
+.team-label.yellow {
+  color: #f1c40f;
+}
+
+.score-buttons {
+  display: flex;
+  gap: 5px;
+}
+
+.score-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-weight: bold;
+  padding: 0;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background-color: #24344a;
+  color: white;
+}
+
+.score-btn.selected {
+  border: 2px solid white;
+  transform: scale(1.1);
+}
+
+.score-btn[data-team="red"].selected {
+  background-color: #e74c3c;
+}
+
+.score-btn[data-team="yellow"].selected {
+  background-color: #f1c40f;
+  color: #333;
+}
+
+/* Help Modal Styles */
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 15px 0;
+}
+
+.help-table tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.help-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #223045;
+}
+
+.help-table td:first-child {
+  width: 120px;
+}
+
+kbd {
+  background-color: #24344a;
+  border: 1px solid #324356;
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  color: var(--ink);
+  display: inline-block;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+#helpModal h4 {
+  color: #4a7bff;
+  margin: 20px 0 10px 0;
+  border-bottom: 1px solid #4a7bff;
+  padding-bottom: 5px;
+}
+
+#helpModal ul, #helpModal ol {
+  padding-left: 25px;
+  margin: 10px 0;
+}
+
+#helpModal li {
+  margin-bottom: 6px;
+}
+
+/* Scoreboard styles */
+.scoreboard-container {
+  overflow-x: auto;
+  margin-bottom: 10px;
+}
+
+.scoreboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--ink);
+  margin-bottom: 15px;
+}
+
+.scoreboard-table th, .scoreboard-table td {
+  padding: 10px;
+  text-align: center;
+  border: 1px solid #223045;
+}
+
+.scoreboard-table th {
+  background-color: #1e293b;
+  font-weight: bold;
+}
+
+.scoreboard-table .team-red td:first-child {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.scoreboard-table .team-yellow td:first-child {
+  color: #f1c40f;
+  font-weight: bold;
+}
+
+.scoreboard-table td:last-child {
+  font-weight: bold;
+  background-color: #24344a;
 }

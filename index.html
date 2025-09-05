@@ -47,7 +47,15 @@
         </div>
         <div class="small" style="margin-top: 5px;">Press and hold the spacebar to sweep during shot</div>
       </div>
-      <div style="text-align: right; margin-top: 10px;">
+      <div style="text-align: right; margin-top: 10px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button id="helpBtn" class="secondary" title="Help & Keyboard Shortcuts (? key)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Help
+        </button>
         <button id="settingsBtn" class="secondary" title="Advanced Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
@@ -62,14 +70,80 @@
     <!-- Third column - Buttons and metrics -->
     <div>
       <div class="buttons">
-        <button id="throwBtn">Throw</button>
-        <button id="resetBtn" class="secondary">Reset</button>
-        <button id="csvBtn" class="secondary">Export CSV</button>
-        <button id="stopBtn" class="warn">Stop</button>
+        <button id="throwBtn" title="Throw the rock (Enter)">Throw</button>
+        <button id="resetBtn" class="secondary" title="Reset the shot (R)">Reset</button>
+        <button id="csvBtn" class="secondary" title="Export trajectory data as CSV">Export CSV</button>
+        <button id="stopBtn" class="warn" title="Stop the current shot">Stop</button>
       </div>
       
       <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
       
+      <!-- Game controls and scoring -->
+      <fieldset style="border: 2px solid #79d27f;">
+        <legend style="font-weight: bold; color: #79d27f;">Game Play</legend>
+        
+        <!-- Current game state -->
+        <div class="game-state-info">
+          <div class="state-row">
+            <span>Current End: <b id="currentEndNumber">1</b></span>
+            <span>Stones Thrown: <b id="stonesThrown">0</b>/16</span>
+          </div>
+          <div class="state-row">
+            <span>Team to Throw: 
+              <b id="teamToThrow" style="color: #e74c3c;">Red</b>
+            </span>
+            <span>Stone: <b id="stoneNumber">1</b></span>
+          </div>
+        </div>
+        
+        <!-- Team indicator and toggle -->
+        <div class="team-indicator" style="margin: 10px 0;">
+          <div class="team-name red">Red Team</div>
+          <div class="score-display">
+            <div class="score-box red" id="redScore">0</div>
+            <div class="score-box yellow" id="yellowScore">0</div>
+          </div>
+          <div class="team-name yellow">Yellow Team</div>
+        </div>
+        
+        <!-- Game control buttons -->
+        <div class="buttons">
+          <button id="nextThrowBtn" class="secondary" title="Set up for next throw (N)">Next Throw</button>
+          <button id="scoreEndBtn" style="background-color: #79d27f; color: #03260d;" title="Score the current end (S)">Score End</button>
+          <button id="viewScoreboardBtn" class="secondary" title="View game scoreboard (V)">View Scoreboard</button>
+          <button id="resetEndBtn" class="warn" title="Reset the current end">Reset End</button>
+        </div>
+        
+        <div id="endScoringDisplay" style="display: none; margin-top: 10px; text-align: center;">
+          <div style="font-weight: bold; margin-bottom: 5px;">End Score</div>
+          <div class="scoring-result">
+            <span class="team-label red">Red:</span>
+            <div class="score-buttons red">
+              <button class="score-btn" data-team="red" data-score="0">0</button>
+              <button class="score-btn" data-team="red" data-score="1">1</button>
+              <button class="score-btn" data-team="red" data-score="2">2</button>
+              <button class="score-btn" data-team="red" data-score="3">3</button>
+              <button class="score-btn" data-team="red" data-score="4+">4+</button>
+            </div>
+          </div>
+          <div class="scoring-result">
+            <span class="team-label yellow">Yellow:</span>
+            <div class="score-buttons yellow">
+              <button class="score-btn" data-team="yellow" data-score="0">0</button>
+              <button class="score-btn" data-team="yellow" data-score="1">1</button>
+              <button class="score-btn" data-team="yellow" data-score="2">2</button>
+              <button class="score-btn" data-team="yellow" data-score="3">3</button>
+              <button class="score-btn" data-team="yellow" data-score="4+">4+</button>
+            </div>
+          </div>
+          <div class="score-action-buttons" style="margin-top: 10px;">
+            <button id="confirmScoreBtn" style="background-color: #79d27f;">Confirm Score</button>
+            <button id="autoscoreBtn" class="secondary">Auto Score</button>
+            <button id="cancelScoreBtn" class="warn">Cancel</button>
+          </div>
+        </div>
+      </fieldset>
+
       <!-- Stone control buttons -->
       <fieldset>
         <legend>Stones</legend>
@@ -115,6 +189,30 @@
     </div>
     <div class="modal-body">
       <fieldset>
+        <legend>Presets</legend>
+        <div>
+          <h4>Animation Speed</h4>
+          <div class="preset-buttons">
+            <button id="presetVeryFast" class="preset-btn speed-btn">VERY FAST</button>
+            <button id="presetSlowMotion" class="preset-btn speed-btn">SLOW MOTION</button>
+          </div>
+          
+          <h4>Ice Conditions</h4>
+          <div class="preset-buttons">
+            <button id="presetDefault" class="preset-btn">Default</button>
+            <button id="presetOlympic" class="preset-btn">Olympic Ice</button>
+            <button id="presetWorlds" class="preset-btn">World Championships</button>
+            <button id="presetClub" class="preset-btn">Club Competition</button>
+            <button id="presetGrandSlam" class="preset-btn">Grand Slam</button>
+            <button id="presetMixedDoubles" class="preset-btn">Mixed Doubles</button>
+            <button id="presetSwingy" class="preset-btn">Swingy Ice</button>
+            <button id="presetStraight" class="preset-btn">Straight Ice</button>
+            <button id="presetSlow" class="preset-btn">Slow Pebble</button>
+          </div>
+        </div>
+      </fieldset>
+      
+      <fieldset>
         <legend>Ice & Stone</legend>
         <div class="row">
           <label>ice speed
@@ -129,13 +227,17 @@
       <fieldset>
         <legend>Advanced</legend>
         <div class="row">
+          <label>Animation Speed
+            <input id="animationSpeed" type="number" step="1" min="1" max="64" value="24">
+          </label>
           <label>segments
             <input id="segments" type="number" step="1" min="60" max="720" value="180">
           </label>
+        </div>
+        <div class="row">
           <label>dt (s)
             <input id="dt" type="number" step="0.001" min="0.001" max="0.05" value="0.01">
           </label>
-        </div>
         <div class="row">
           <label>t_max (s)
             <input id="tmax" type="number" step="1" min="5" max="120" value="60">
@@ -220,6 +322,133 @@
   </div>
 </div>
 
+<!-- Help Modal -->
+<div id="helpModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header" style="border-bottom-color: #4a7bff;">
+      <h3 style="color: #4a7bff;">Help & Keyboard Shortcuts</h3>
+      <span class="close" id="closeHelp">&times;</span>
+    </div>
+    <div class="modal-body">
+      <h4>Keyboard Shortcuts</h4>
+      <table class="help-table">
+        <tr>
+          <td><kbd>Enter</kbd></td>
+          <td>Throw rock</td>
+        </tr>
+        <tr>
+          <td><kbd>R</kbd></td>
+          <td>Reset shot</td>
+        </tr>
+        <tr>
+          <td><kbd>N</kbd></td>
+          <td>Next throw</td>
+        </tr>
+        <tr>
+          <td><kbd>S</kbd></td>
+          <td>Score end</td>
+        </tr>
+        <tr>
+          <td><kbd>V</kbd></td>
+          <td>View scoreboard</td>
+        </tr>
+        <tr>
+          <td><kbd>H</kbd> or <kbd>?</kbd></td>
+          <td>Open this help window</td>
+        </tr>
+        <tr>
+          <td><kbd>Space</kbd></td>
+          <td>Hold to sweep during shot</td>
+        </tr>
+        <tr>
+          <td><kbd>Esc</kbd></td>
+          <td>Close any open modal</td>
+        </tr>
+      </table>
+      
+      <h4>How to Play</h4>
+      <ol>
+        <li>Click on the sheet to place the skip's broom (target)</li>
+        <li>Adjust throw weight and turn direction</li>
+        <li>Click "Throw" or press Enter to throw the rock</li>
+        <li>Hold the spacebar to sweep during the shot</li>
+        <li>After each end, click "Score End" to determine which team scores</li>
+      </ol>
+      
+      <h4>Game Rules</h4>
+      <ul>
+        <li>Each team (Red and Yellow) throws 8 stones per end</li>
+        <li>Teams alternate throws</li>
+        <li>The team with stones closest to the center of the house scores points</li>
+        <li>Only one team scores per end</li>
+        <li>A team scores one point for each of their stones that is closer to the center than any of the opponent's stones</li>
+      </ul>
+    </div>
+    <div class="modal-footer" style="border-top-color: #4a7bff;">
+      <button id="closeHelpBtn" class="secondary">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scoreboard Modal -->
+<div id="scoreboardModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header" style="border-bottom-color: #79d27f;">
+      <h3 style="color: #79d27f;">Game Scoreboard</h3>
+      <span class="close" id="closeScoreboard">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="scoreboard-container">
+        <table class="scoreboard-table">
+          <thead>
+            <tr>
+              <th>Team</th>
+              <th>1</th>
+              <th>2</th>
+              <th>3</th>
+              <th>4</th>
+              <th>5</th>
+              <th>6</th>
+              <th>7</th>
+              <th>8</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="team-red">
+              <td>Red</td>
+              <td id="red-end-1">-</td>
+              <td id="red-end-2">-</td>
+              <td id="red-end-3">-</td>
+              <td id="red-end-4">-</td>
+              <td id="red-end-5">-</td>
+              <td id="red-end-6">-</td>
+              <td id="red-end-7">-</td>
+              <td id="red-end-8">-</td>
+              <td id="red-total">0</td>
+            </tr>
+            <tr class="team-yellow">
+              <td>Yellow</td>
+              <td id="yellow-end-1">-</td>
+              <td id="yellow-end-2">-</td>
+              <td id="yellow-end-3">-</td>
+              <td id="yellow-end-4">-</td>
+              <td id="yellow-end-5">-</td>
+              <td id="yellow-end-6">-</td>
+              <td id="yellow-end-7">-</td>
+              <td id="yellow-end-8">-</td>
+              <td id="yellow-total">0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer" style="border-top-color: #79d27f;">
+      <button id="closeScoreboardBtn" class="secondary">Close</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="js/app.js"></script>
 <script>
   // Modal functionality
@@ -229,6 +458,12 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const closeSettingsBtnX = document.querySelector('#settingsModal .close');
+    
+    // Help Modal
+    const helpModal = document.getElementById('helpModal');
+    const helpBtn = document.getElementById('helpBtn');
+    const closeHelpBtn = document.getElementById('closeHelpBtn');
+    const closeHelpBtnX = document.querySelector('#helpModal .close');
     
     // Shot Exploration Modal
     const shotExplorationModal = document.getElementById('shotExplorationModal');
@@ -249,6 +484,19 @@
       settingsModal.style.display = 'none';
     });
     
+    // Help Modal Functions
+    helpBtn.addEventListener('click', function() {
+      helpModal.style.display = 'block';
+    });
+    
+    closeHelpBtnX.addEventListener('click', function() {
+      helpModal.style.display = 'none';
+    });
+    
+    closeHelpBtn.addEventListener('click', function() {
+      helpModal.style.display = 'none';
+    });
+    
     // Shot Exploration Modal Functions
     shotExplorationBtn.addEventListener('click', function() {
       shotExplorationModal.style.display = 'block';
@@ -262,6 +510,24 @@
       shotExplorationModal.style.display = 'none';
     });
     
+    // Scoreboard Modal Functions
+    const scoreboardModal = document.getElementById('scoreboardModal');
+    const viewScoreboardBtn = document.getElementById('viewScoreboardBtn');
+    const closeScoreboardBtn = document.getElementById('closeScoreboardBtn');
+    const closeScoreboardBtnX = document.querySelector('#scoreboardModal .close');
+    
+    viewScoreboardBtn.addEventListener('click', function() {
+      scoreboardModal.style.display = 'block';
+    });
+    
+    closeScoreboardBtnX.addEventListener('click', function() {
+      scoreboardModal.style.display = 'none';
+    });
+    
+    closeScoreboardBtn.addEventListener('click', function() {
+      scoreboardModal.style.display = 'none';
+    });
+    
     // Close modals when clicking outside them
     window.addEventListener('click', function(event) {
       if (event.target === settingsModal) {
@@ -269,6 +535,156 @@
       }
       if (event.target === shotExplorationModal) {
         shotExplorationModal.style.display = 'none';
+      }
+      if (event.target === scoreboardModal) {
+        scoreboardModal.style.display = 'none';
+      }
+      if (event.target === helpModal) {
+        helpModal.style.display = 'none';
+      }
+    });
+    
+    // Help Modal Functions
+    helpBtn.addEventListener('click', function() {
+      helpModal.style.display = 'block';
+    });
+    
+    closeHelpBtnX.addEventListener('click', function() {
+      helpModal.style.display = 'none';
+    });
+    
+    closeHelpBtn.addEventListener('click', function() {
+      helpModal.style.display = 'none';
+    });
+    
+    // Animation speed presets
+    document.getElementById('presetVeryFast').addEventListener('click', function() {
+      document.getElementById('animationSpeed').value = '48';
+    });
+    
+    document.getElementById('presetSlowMotion').addEventListener('click', function() {
+      document.getElementById('animationSpeed').value = '1';
+    });
+    
+    // Ice condition presets
+    document.getElementById('presetDefault').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0075';
+      document.getElementById('alpha').value = '0.027';
+      document.getElementById('rband').value = '0.065';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetOlympic').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0065';
+      document.getElementById('alpha').value = '0.025';
+      document.getElementById('rband').value = '0.066';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetWorlds').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0070';
+      document.getElementById('alpha').value = '0.026';
+      document.getElementById('rband').value = '0.065';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetClub').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0080';
+      document.getElementById('alpha').value = '0.028';
+      document.getElementById('rband').value = '0.065';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetGrandSlam').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0068';
+      document.getElementById('alpha').value = '0.027';
+      document.getElementById('rband').value = '0.064';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetMixedDoubles').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0073';
+      document.getElementById('alpha').value = '0.029';
+      document.getElementById('rband').value = '0.064';
+      document.getElementById('animationSpeed').value = '10';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetSwingy').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0080';
+      document.getElementById('alpha').value = '0.035';
+      document.getElementById('rband').value = '0.068';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetStraight').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0070';
+      document.getElementById('alpha').value = '0.018';
+      document.getElementById('rband').value = '0.065';
+      document.getElementById('animationSpeed').value = '8';
+      document.getElementById('segments').value = '180';
+    });
+    
+    document.getElementById('presetSlow').addEventListener('click', function() {
+      document.getElementById('mu0').value = '0.0090';
+      document.getElementById('alpha').value = '0.029';
+      document.getElementById('rband').value = '0.065';
+      document.getElementById('animationSpeed').value = '6';
+      document.getElementById('segments').value = '180';
+    });
+    
+    // Close modals with Escape key and add keyboard shortcuts
+    document.addEventListener('keydown', function(event) {
+      // Close modals with Escape key
+      if (event.key === 'Escape') {
+        settingsModal.style.display = 'none';
+        shotExplorationModal.style.display = 'none';
+        scoreboardModal.style.display = 'none';
+        helpModal.style.display = 'none';
+        
+        // Also hide the scoring UI if it's visible
+        const endScoringDisplay = document.getElementById('endScoringDisplay');
+        if (endScoringDisplay.style.display === 'block') {
+          endScoringDisplay.style.display = 'none';
+        }
+      }
+      
+      // Don't trigger shortcuts when inside input fields or modals are open
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || 
+          settingsModal.style.display === 'block' || 
+          shotExplorationModal.style.display === 'block' || 
+          scoreboardModal.style.display === 'block' ||
+          helpModal.style.display === 'block') {
+        return;
+      }
+      
+      // Keyboard shortcuts
+      switch(event.key) {
+        case 'Enter': // Throw rock
+          document.getElementById('throwBtn').click();
+          break;
+        case 'r': // Reset
+          document.getElementById('resetBtn').click();
+          break;
+        case 'n': // Next throw
+          document.getElementById('nextThrowBtn').click();
+          break;
+        case 's': // Score end
+          document.getElementById('scoreEndBtn').click();
+          break;
+        case 'v': // View scoreboard
+          document.getElementById('viewScoreboardBtn').click();
+          break;
+        case '?': // Help
+        case 'h': // Alternative help key
+          document.getElementById('helpBtn').click();
+          break;
       }
     });
   });
