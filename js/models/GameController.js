@@ -465,26 +465,70 @@ export default class GameController {
     }, stepMS);
   }
   
-  // Export stone data to CSV
+  // Export position evaluation data as JSON
   exportCSV() {
     if (this.stones.length === 0) {
       alert("No stones to export data for.");
       return;
     }
     
-    // Export all stone positions and states
-    let csv = "stone_id,team,t_s,x_m,y_m,vx_mps,vy_mps,omega_radps\n";
-    
-    this.stones.forEach(stone => {
-      csv += `${stone.id},${stone.team},${stone.t.toFixed(4)},${stone.x.toFixed(6)},${stone.y.toFixed(6)},${stone.vx.toFixed(6)},${stone.vy.toFixed(6)},${stone.w.toFixed(6)}\n`;
-    });
-    
-    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "stones.csv";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      // Create data object with stone positions and game state for evaluation
+      const buttonX = this.renderer.dimensions.TEE_X;
+      
+      // Get the shot number (0-15)
+      const shotNumber = this.gameState.stonesThrown > 0 ? this.gameState.stonesThrown - 1 : 0;
+      
+      // Determine which team has hammer
+      let hammerTeam = 'red'; // Default to red having hammer in first end
+      
+      if (this.gameState.currentEnd > 1 && this.gameState.endScores.length > 0) {
+        const lastEnd = this.gameState.endScores[this.gameState.endScores.length - 1];
+        if (lastEnd.red > 0) {
+          hammerTeam = 'yellow'; // Yellow has hammer if red scored in the previous end
+        } else if (lastEnd.yellow > 0) {
+          hammerTeam = 'red'; // Red has hammer if yellow scored in the previous end
+        }
+      }
+      
+      // Create the full JSON export data object
+      const exportData = {
+        gameState: {
+          currentEnd: this.gameState.currentEnd,
+          shotNumber: shotNumber,
+          hammerTeam: hammerTeam,
+          stonesThrown: this.gameState.stonesThrown
+        },
+        stonePositions: this.stones.map(stone => ({
+          id: stone.id,
+          team: stone.team,
+          x: stone.x,          // meters from hog line
+          y: stone.y,          // meters from center line
+          // Include button-centered coordinates too (meters)
+          buttonCenteredX: stone.x - buttonX,  // meters from tee (button)
+          buttonCenteredY: stone.y             // meters from center line
+        })),
+        timestamp: new Date().toISOString()
+      };
+      
+      // Convert to JSON string with nice formatting
+      const jsonString = JSON.stringify(exportData, null, 2);
+      
+      // Create and download the file
+      const blob = new Blob([jsonString], {type: "application/json;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; 
+      a.download = `position_evaluation_end${this.gameState.currentEnd}_shot${shotNumber+1}.json`;
+      document.body.appendChild(a); 
+      a.click(); 
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error("Error exporting position data:", error);
+      alert("Error exporting position data. See console for details.");
+    }
   }
 
   // Generate and display multiple shot trajectories
