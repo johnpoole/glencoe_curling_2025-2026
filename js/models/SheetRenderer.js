@@ -166,7 +166,7 @@ export default class SheetRenderer {
   }
   
   // Draw a path from trajectory points
-  drawPath(trajectory, color, isMultiPath = false) {
+  drawPath(trajectory, color, isMultiPath = false, pathData = null) {
     const svg = this.svg;
     const xScale = this.xScale;
     const yScale = this.yScale;
@@ -175,11 +175,105 @@ export default class SheetRenderer {
       .x(d => xScale(d.x))
       .y(d => yScale(d.y));
     
-    return svg.append("path")
+    const path = svg.append("path")
       .attr("class", isMultiPath ? "path path-visualization" : "path")
       .attr("d", line(trajectory))
       .style("stroke", color || "#1f2b38")
       .style("stroke-width", isMultiPath ? 2.5 : 2);
+      
+    // Add data attributes for hover information if provided
+    if (pathData) {
+      path.attr("data-velocity", pathData.velocity)
+          .attr("data-broom-y", pathData.broomY)
+          .attr("data-spin", pathData.spinDirection);
+          
+      // Add mouseover/mouseout event handlers
+      path.on("mouseover", function(event) {
+        // Show this path at full opacity
+        d3.select(this).style("opacity", 1)
+                       .style("stroke-width", 4)
+                       .style("filter", "drop-shadow(0 0 3px rgba(255, 255, 255, 0.9))");
+        
+        // Check if this is a collision path
+        const isCollisionPath = pathData.isCollision || pathData.isHitStone;
+        let relatedPaths = [];
+        
+        // If this is a collision path, find related paths (thrown and hit stones from same scenario)
+        if (isCollisionPath && pathData.collisionId) {
+          // Find all paths with the same collision ID
+          relatedPaths = svg.selectAll(".path-visualization")
+            .filter(function() {
+              const pathCollisionId = d3.select(this).attr("data-collision-id");
+              return pathCollisionId && pathCollisionId === pathData.collisionId && this !== event.currentTarget;
+            }).nodes();
+        }
+        
+        // Hide all other paths except related collision paths
+        svg.selectAll(".path-visualization").filter(function() { 
+          // Don't hide current path
+          if (this === event.currentTarget) return false;
+          
+          // Don't hide related paths in the same collision scenario
+          if (relatedPaths.includes(this)) return false;
+          
+          // Hide all other paths
+          return true;
+        }).style("opacity", 0.1);
+        
+        // Show related paths at slightly higher opacity
+        if (relatedPaths.length > 0) {
+          d3.selectAll(relatedPaths).style("opacity", 0.7);
+        }
+        
+        // Generate appropriate info text
+        let infoText;
+        if (pathData.isCollision) {
+          infoText = `Collision Path - Vel: ${pathData.velocity} m/s, Broom: ${pathData.broomY.toFixed(2)} m, Spin: ${pathData.spinDirection}`;
+        } else if (pathData.isHitStone) {
+          infoText = `Stone Movement - ${pathData.spinDirection}`;
+        } else {
+          infoText = `Vel: ${pathData.velocity} m/s, Broom: ${pathData.broomY.toFixed(2)} m, Spin: ${pathData.spinDirection}`;
+        }
+        
+        // Remove any existing info box
+        svg.selectAll(".path-info-box").remove();
+        
+        // Create info box
+        const infoBox = svg.append("g")
+          .attr("class", "path-info-box")
+          .attr("transform", `translate(${xScale(trajectory[0].x)}, ${yScale(trajectory[0].y) - 20})`);
+          
+        infoBox.append("rect")
+          .attr("x", -5)
+          .attr("y", -20)
+          .attr("width", infoText.length * 7)
+          .attr("height", 20)
+          .attr("rx", 5)
+          .attr("ry", 5)
+          .style("fill", "rgba(0, 0, 0, 0.7)");
+          
+        infoBox.append("text")
+          .attr("x", 0)
+          .attr("y", -5)
+          .style("fill", "white")
+          .style("font-size", "12px")
+          .text(infoText);
+      })
+      .on("mouseout", function() {
+        // Restore all paths to normal opacity
+        svg.selectAll(".path-visualization").style("opacity", 0.8)
+                                           .style("stroke-width", 2.5)
+                                           .style("filter", "none");
+        
+        // Remove info box
+        svg.selectAll(".path-info-box").remove();
+        
+        // Remove any temporary highlighting classes
+        svg.selectAll(".path-visualization").classed("highlight-path", false);
+      });
+    }
+      
+    return path;
   }
   
   // Draw multiple paths with transparency

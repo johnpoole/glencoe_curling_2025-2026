@@ -444,13 +444,27 @@ input:checked + .slider:before {
 /* Path visualization styles */
 .path-visualization {
   opacity: 0.8;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, stroke-width 0.2s, filter 0.2s;
   stroke-linecap: round;
+  cursor: pointer;
 }
 
 .path-visualization:hover {
   opacity: 1;
-  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.7));
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9));
+  z-index: 10;
+}
+
+.path-info-box {
+  pointer-events: none;
+}
+
+/* Styling for highlighted collision paths */
+.path-visualization.highlight-path {
+  opacity: 0.7;
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.5));
 }
 
 .velocity-legend {

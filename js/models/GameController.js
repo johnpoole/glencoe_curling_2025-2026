@@ -608,8 +608,16 @@ export default class GameController {
               spinDirection: spinDirection.label
             });
             
-            // Draw the path with semi-transparent color
-            this.renderer.drawPath(trajectory, colorWithOpacity, true);
+            // Create path data object with all info needed for hover
+            const pathDataObj = {
+              velocity,
+              broomY, 
+              spinDirection: spinDirection.label,
+              color: colorWithOpacity
+            };
+            
+            // Draw the path with semi-transparent color and pass path data
+            this.renderer.drawPath(trajectory, colorWithOpacity, true, pathDataObj);
             
             // Only add to legend once per velocity/spin combination
             if (!addedToLegend) {
@@ -706,8 +714,26 @@ export default class GameController {
               if (trajectories[999] && trajectories[999].length > 0) {
                 console.log("Drawing collision path with", trajectories[999].length, "points");
                 
+                // Generate a unique collision ID for this collision scenario
+                const collisionId = `collision-${velocity}-${broomY}-${spinDirection.value}-${Date.now()}`;
+                
+                // Create path data for collision path
+                const collisionPathData = {
+                  velocity: velocity,
+                  broomY: broomY,
+                  spinDirection: spinDirection.label,
+                  color: collisionColor,
+                  isCollision: true,
+                  collisionId: collisionId
+                };
+                
                 // Always draw the throwing stone path
-                this.renderer.drawPath(trajectories[999], collisionColor, true);
+                const thrownStonePath = this.renderer.drawPath(trajectories[999], collisionColor, true, collisionPathData);
+                
+                // Add collision ID as a data attribute
+                if (thrownStonePath) {
+                  thrownStonePath.attr("data-collision-id", collisionId);
+                }
                 
                 // Check if we have any stones that moved
                 let movedStonesCount = 0;
@@ -724,8 +750,24 @@ export default class GameController {
                     if (didMove) {
                       console.log(`Drawing moved stone ${stoneId} path with ${traj.length} points`);
                       movedStonesCount++;
+                      
+                      // Path data for moved stone
+                      const movedStonePathData = {
+                        velocity: "Stone moved",
+                        broomY: broomY,
+                        spinDirection: `Stone ${stoneId}`,
+                        color: "rgba(180, 50, 220, 0.9)",
+                        isHitStone: true,
+                        collisionId: collisionId
+                      };
+                      
                       // This is an existing stone that moved due to collision - bright purple with high opacity
-                      this.renderer.drawPath(traj, "rgba(180, 50, 220, 0.9)", true);
+                      const hitStonePath = this.renderer.drawPath(traj, "rgba(180, 50, 220, 0.9)", true, movedStonePathData);
+                      
+                      // Add collision ID as a data attribute
+                      if (hitStonePath) {
+                        hitStonePath.attr("data-collision-id", collisionId);
+                      }
                     }
                   }
                 });
