@@ -1,10 +1,11 @@
-// Curling end evaluator — full module
-// Input: stones = [["A"|"B", x, y], ...] in Cartesian (m), shotNumber 0..15, hammerTeam "A"|"B", skillPercent 10–90 (default 50)
-// Output: { advantage:{A,B}, buckets17:{-8..+8} }   // sums to 1.0
+// Curling end evaluator — full red/yellow version
+// Input: stones = [["red"|"yellow", x, y], ...] in Cartesian (m, button-centered),
+//        shotNumber 0..15, hammerTeam "red"|"yellow", skillPercent 10–90 (default 50)
+// Output: { advantage:{red,yellow}, buckets17:{-8..+8} }   // probabilities sum to 1.0
 
 // ===== Constants =====
-const R_HOUSE = 1.829;        // house radius (12 ft / 2)
-const D_STONE = 0.285;        // stone diameter (m)
+const R_HOUSE = 1.829;
+const D_STONE = 0.285;
 
 // Positional weights
 const H0 = 0.90;
@@ -18,12 +19,12 @@ const W_CONG = 0.20;
 const CENTER_BAND = 0.60;
 const FREEZE_RADIUS = 0.35;
 
-// Geometry (origin = button, +y to throwing end)
+// Geometry
 const HALF_WIDTH = 2.44;
 const BACK_LINE = -5.486;
 const HOG_LINE  = 6.40;
 
-// Baselines
+// Baseline priors
 const BASELINE_HAMMER = [0.30,0.40,0.25,0.04,0.01,0,0,0,0];
 const BASELINE_STEAL  = [0.035,0.010,0.003,0.001,0.0006,0.0003,0.0001,0.00005];
 
@@ -65,23 +66,20 @@ function baseHammer(s, team, hammerTeam){
 }
 function radialValue(r){
   if (r>R_HOUSE) return 0.0;
-  // FIX: boost draws in front half (4f/8f) vs. back-12s
   const depthBoost = (r<1.3? 1.25 : 0.9);
   return depthBoost*ALPHA1*(1.0-Math.pow(r/R_HOUSE,GAMMA));
 }
 function hasLineOfSightBlocker([x,y],blockers,phiDeg=7.5){
   const vx=-x, vy=-y, vr=Math.hypot(vx,vy);
   if (vr<1e-6) return 1.0;
-  const ux=vx/vr, uy=vy/vr;
-  const phi=(phiDeg*Math.PI)/180;
+  const ux=vx/vr, uy=vy/vr, phi=(phiDeg*Math.PI)/180;
   for (const [bx,by] of blockers){
     if (Math.hypot(bx,by)>=vr-1e-6) continue;
     const wx=bx-x, wy=by-y, wr=Math.hypot(wx,wy);
     if (wr<1e-6) return 1.0;
     let dot=(wx*ux+wy*uy)/wr; dot=Math.max(-1,Math.min(1,dot));
     const sinT=Math.sqrt(Math.max(0,1-dot*dot));
-    const perp=wr*sinT;
-    const theta=Math.acos(dot);
+    const perp=wr*sinT, theta=Math.acos(dot);
     if (theta<=phi && perp<=D_STONE/2) return 1.0;
   }
   return 0.0;
@@ -105,8 +103,8 @@ function computeTeamStoneValues(team,stones){
       if (hypot2(fx-x,fy-y)<=FREEZE_RADIUS && hypot2(fx,fy)<=r+0.10){F=1;break;}
     }
     v*=(1+W_FREEZE*F);
-    v*=(1-W_TAKEOUT*takeoutEase(G));
-    entries.push({x,y,r,G,T:takeoutEase(G),v,pre:v,acc:0});
+    const T=takeoutEase(G); v*=(1-W_TAKEOUT*T);
+    entries.push({x,y,r,G,T,v,pre:v,acc:0});
   }
   return entries;
 }
@@ -150,6 +148,7 @@ function applyDoubleVulnerability(teamEntries,allStones,s,skill){
 
 // ===== Congestion =====
 function congestionTerm(stones,hammerTeam,s){
+  const nh=hammerTeam==="red"?"yellow":"red";
   function countCenter(team){
     let c=0; for (const [t,x,y] of stones){
       if (t!==team) continue; const r=hypot2(x,y);
@@ -157,7 +156,6 @@ function congestionTerm(stones,hammerTeam,s){
       if (Math.abs(x)<=CENTER_BAND) c++;
     } return c;
   }
-  const nh=hammerTeam==="A"?"B":"A";
   return W_CONG*(countCenter(nh)-countCenter(hammerTeam))*Math.sqrt(Math.max(s,0)/16.0);
 }
 
@@ -174,38 +172,42 @@ function distribution17_fromScore(scoreForHammer,s,skill){
   });
   const logits=kVals.map((k,i)=>Math.log(base[i]+1e-12)-beta*(k-mu)**2);
   const probs=softmax1D(logits);
-  const out={}; kVals.forEach((k,i)=>out[k]=probs[i]); return out;
+  const out={}; kVals.forEach((k,i)=>out[k]=probs[i]);
+  return out;
 }
 
 // ===== Constraints =====
 function countThrown(n,hammerTeam){
-  n=n+1; return hammerTeam==="A"?{A:Math.floor(n/2),B:Math.floor((n+1)/2)}:{B:Math.floor(n/2),A:Math.floor((n+1)/2)};
+  n=n+1;
+  return hammerTeam==="red"?{red:Math.floor(n/2),yellow:Math.floor((n+1)/2)}
+                           :{yellow:Math.floor(n/2),red:Math.floor((n+1)/2)};
 }
 function collapseToTerminal(stones,hammerTeam){
-  const rA=stones.filter(([t,x,y])=>t==="A"&&isInPlay(x,y)&&hypot2(x,y)<=R_HOUSE).map(([t,x,y])=>hypot2(x,y)).sort((a,b)=>a-b);
-  const rB=stones.filter(([t,x,y])=>t==="B"&&isInPlay(x,y)&&hypot2(x,y)<=R_HOUSE).map(([t,x,y])=>hypot2(x,y)).sort((a,b)=>a-b);
+  const rRed=stones.filter(([t,x,y])=>t==="red"&&isInPlay(x,y)&&hypot2(x,y)<=R_HOUSE).map(([t,x,y])=>hypot2(x,y)).sort((a,b)=>a-b);
+  const rYel=stones.filter(([t,x,y])=>t==="yellow"&&isInPlay(x,y)&&hypot2(x,y)<=R_HOUSE).map(([t,x,y])=>hypot2(x,y)).sort((a,b)=>a-b);
   let score=0;
-  if (rA.length||rB.length){
-    if (rA.length&&(!rB.length||rA[0]<rB[0]-1e-9)){
-      const cutoff=rB.length?rB[0]:Infinity;
-      const raw=rA.filter(r=>r<cutoff-1e-9).length;
-      score=hammerTeam==="A"?raw:-raw;
-    } else if (rB.length&&(!rA.length||rB[0]<rA[0]-1e-9)){
-      const cutoff=rA.length?rA[0]:Infinity;
-      const raw=rB.filter(r=>r<cutoff-1e-9).length;
-      score=hammerTeam==="B"?raw:-raw;
+  if (rRed.length||rYel.length){
+    if (rRed.length&&(!rYel.length||rRed[0]<rYel[0]-1e-9)){
+      const cutoff=rYel.length?rYel[0]:Infinity;
+      const raw=rRed.filter(r=>r<cutoff-1e-9).length;
+      score=hammerTeam==="red"?raw:-raw;
+    } else if (rYel.length&&(!rRed.length||rYel[0]<rRed[0]-1e-9)){
+      const cutoff=rRed.length?rRed[0]:Infinity;
+      const raw=rYel.filter(r=>r<cutoff-1e-9).length;
+      score=hammerTeam==="yellow"?raw:-raw;
     } else score=0;
   }
   const b={}; for (let k=-8;k<=8;k++) b[k]=0; b[score]=1; return b;
 }
 function applyConstraints(buckets,stones,hammerTeam,s,n){
-  const inA=stones.filter(([t,x,y])=>t==="A"&&isInPlay(x,y)).length;
-  const inB=stones.filter(([t,x,y])=>t==="B"&&isInPlay(x,y)).length;
-  const {A:thA,B:thB}=countThrown(n,hammerTeam), remA=8-thA, remB=8-thB;
-  const maxA=inA+remA, maxB=inB+remB;
+  const inRed=stones.filter(([t,x,y])=>t==="red"&&isInPlay(x,y)).length;
+  const inYel=stones.filter(([t,x,y])=>t==="yellow"&&isInPlay(x,y)).length;
+  const {red:thRed,yellow:thYel}=countThrown(n,hammerTeam);
+  const remRed=8-thRed, remYel=8-thYel;
+  const maxRed=inRed+remRed, maxYel=inYel+remYel;
   if (s===0) return collapseToTerminal(stones,hammerTeam);
-  for (let k=1;k<=8;k++){ if (hammerTeam==="A"&&k>maxA) buckets[k]=0; if (hammerTeam==="B"&&k>maxB) buckets[k]=0; }
-  for (let k=1;k<=8;k++){ if (hammerTeam==="A"&&k>maxB) buckets[-k]=0; if (hammerTeam==="B"&&k>maxA) buckets[-k]=0; }
+  for (let k=1;k<=8;k++){ if (hammerTeam==="red"&&k>maxRed) buckets[k]=0; if (hammerTeam==="yellow"&&k>maxYel) buckets[k]=0; }
+  for (let k=1;k<=8;k++){ if (hammerTeam==="red"&&k>maxYel) buckets[-k]=0; if (hammerTeam==="yellow"&&k>maxRed) buckets[-k]=0; }
   let Z=Object.values(buckets).reduce((a,b)=>a+b,0); if (Z>0){ for (const k in buckets) buckets[k]/=Z; }
   return buckets;
 }
@@ -213,19 +215,21 @@ function applyConstraints(buckets,stones,hammerTeam,s,n){
 // ===== Entry point =====
 function evaluatePosition17(shotNumber,hammerTeam,stones,skillPercent=50){
   const s=16-(shotNumber+1);
-  const teamA=computeTeamStoneValues("A",stones), teamB=computeTeamStoneValues("B",stones);
-  applyDoubleVulnerability(teamA,stones,s,skillPercent);
-  applyDoubleVulnerability(teamB,stones,s,skillPercent);
-  const posA=teamA.reduce((a,e)=>a+e.v,0), posB=teamB.reduce((a,e)=>a+e.v,0);
+  const teamRed=computeTeamStoneValues("red",stones);
+  const teamYel=computeTeamStoneValues("yellow",stones);
+  applyDoubleVulnerability(teamRed,stones,s,skillPercent);
+  applyDoubleVulnerability(teamYel,stones,s,skillPercent);
+  const posRed=teamRed.reduce((a,e)=>a+e.v,0), posYel=teamYel.reduce((a,e)=>a+e.v,0);
   const cong=congestionTerm(stones,hammerTeam,s);
-  const base=baseHammer(s,"A",hammerTeam);
-  const scoreA=base+(posA-posB)+cong;
-  const scoreForHammer=hammerTeam==="A"?scoreA:-scoreA;
+  const base=baseHammer(s,"red",hammerTeam);
+  const scoreRed=base+(posRed-posYel)+cong;
+  const scoreForHammer=hammerTeam==="red"?scoreRed:-scoreRed;
   let buckets=distribution17_fromScore(scoreForHammer,s,skillPercent);
   buckets=applyConstraints(buckets,stones,hammerTeam,s,shotNumber);
-  return {advantage:{A:scoreA,B:-scoreA}, buckets17:buckets};
+  return {advantage:{red:scoreRed,yellow:-scoreRed}, buckets17:buckets};
 }
 
-// Export for both ES modules and CommonJS
+// Export
 if (typeof module!=='undefined') module.exports={evaluatePosition17};
+// Export for ES modules
 export { evaluatePosition17 };

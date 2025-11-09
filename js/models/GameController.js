@@ -1267,31 +1267,36 @@ export default class GameController {
       // Import the curlingeval.js module using dynamic import
       import('../analyze/curlingeval.js').then(module => {
         // Access evaluatePosition17 function from the module (handle both ESM and CommonJS exports)
-        const evaluatePosition17 = module.evaluatePosition17 || module.default?.evaluatePosition17;
+        const evaluatePosition17 = module.evaluatePosition17;
+        
+        if (!evaluatePosition17) {
+          console.error("evaluatePosition17 function not found in imported module", module);
+          return;
+        }
         
         // Convert our stone representation to the format expected by evaluatePosition17
-        // evaluatePosition17 expects stones = [["A"|"B", x, y], ...] in Cartesian (m)
+        // evaluatePosition17 expects stones = [["red"|"yellow", x, y], ...] in Cartesian (m, button-centered)
         const stoneData = this.stones.map(stone => {
           // Convert from sheet coordinates to button-centered coordinates
           const buttonX = this.renderer.dimensions.TEE_X;
           const x = stone.x - buttonX;
           const y = stone.y; // Y is already centered
           
-          // Convert team names from 'red'/'yellow' to 'A'/'B' for the evaluator
-          const team = stone.team === 'red' ? 'A' : 'B';
+          // Use team names as-is ('red'/'yellow') for the updated evaluator
+          const team = stone.team;
           
           return [team, x, y]; // Return array format needed by evaluatePosition17
         });
         
         // Determine which team has hammer
-        let hammerTeam = 'A'; // Default to red (A) having hammer in first end
+        let hammerTeam = 'red'; // Default to red having hammer in first end
         
         if (this.gameState.currentEnd > 1 && this.gameState.endScores.length > 0) {
           const lastEnd = this.gameState.endScores[this.gameState.endScores.length - 1];
           if (lastEnd.red > 0) {
-            hammerTeam = 'B'; // Yellow has hammer if red scored in the previous end
+            hammerTeam = 'yellow'; // Yellow has hammer if red scored in the previous end
           } else if (lastEnd.yellow > 0) {
-            hammerTeam = 'A'; // Red has hammer if yellow scored in the previous end
+            hammerTeam = 'red'; // Red has hammer if yellow scored in the previous end
           }
         }
         
@@ -1305,7 +1310,17 @@ export default class GameController {
           result = this.calculateActualEndResult(stoneData, hammerTeam);
         } else {
           // Use the new evaluatePosition17 function
-          result = evaluatePosition17(shotNumber, hammerTeam, stoneData);
+          // Make sure evaluatePosition17 is defined before calling it
+          if (typeof evaluatePosition17 === 'function') {
+            result = evaluatePosition17(shotNumber, hammerTeam, stoneData);
+          } else {
+            console.error("evaluatePosition17 is not a function", typeof evaluatePosition17);
+            // Return a default result if the function isn't available
+            result = {
+              advantage: { red: 0, yellow: 0 },
+              buckets17: { 0: 1.0 }
+            };
+          }
         }
         
         // Prepare for display
@@ -1313,14 +1328,14 @@ export default class GameController {
         if (!evalElement) return;
         
         // Basic UI setup
-        const hammerDisplay = hammerTeam === 'A' ? "Red" : "Yellow";
+        const hammerDisplay = hammerTeam === 'red' ? "Red" : "Yellow";
         // Convert advantages to percentages instead of showing raw decimal values
-        const redAdvantage = Math.round(Math.max(0, result.advantage.A * 100)) + "%";
-        const yellowAdvantage = Math.round(Math.max(0, result.advantage.B * 100)) + "%";
+        const redAdvantage = Math.round(Math.max(0, result.advantage.red * 100)) + "%";
+        const yellowAdvantage = Math.round(Math.max(0, result.advantage.yellow * 100)) + "%";
         
-        const maxAdvantage = Math.max(Math.abs(result.advantage.A), Math.abs(result.advantage.B));
-        const redWidth = maxAdvantage > 0 ? Math.max(0, result.advantage.A / maxAdvantage * 50) : 0;
-        const yellowWidth = maxAdvantage > 0 ? Math.max(0, result.advantage.B / maxAdvantage * 50) : 0;
+        const maxAdvantage = Math.max(Math.abs(result.advantage.red), Math.abs(result.advantage.yellow));
+        const redWidth = maxAdvantage > 0 ? Math.max(0, result.advantage.red / maxAdvantage * 50) : 0;
+        const yellowWidth = maxAdvantage > 0 ? Math.max(0, result.advantage.yellow / maxAdvantage * 50) : 0;
         
         let headerText = shotNumber >= 15 ? 
           `End ${this.gameState.currentEnd} Final Result` :
@@ -1359,7 +1374,7 @@ export default class GameController {
           const prob = result.buckets17[k] || 0;
           if (prob <= 0) continue; // Skip zero probabilities
           
-          if (hammerTeam === 'A') { // Red has hammer
+          if (hammerTeam === 'red') { // Red has hammer
             if (k > 0) {
               // Red (hammer) scores k points
               redProbs[k] += prob;
@@ -1552,7 +1567,7 @@ export default class GameController {
       buckets[0] = 1.0; // 100% chance of a blank end
       
       return {
-        advantage: { A: 0, B: 0 },
+        advantage: { red: 0, yellow: 0 },
         buckets17: buckets
       };
     }
@@ -1595,14 +1610,16 @@ export default class GameController {
     
     // Set advantage based on who scored
     let redAdvantage = 0;
-    if (scoringTeam === 'A') {
+    let yellowAdvantage = 0;
+    
+    if (scoringTeam === 'red') {
       redAdvantage = score * 2; // More advantage for higher scores
     } else {
-      redAdvantage = -score * 2;
+      yellowAdvantage = score * 2;
     }
     
     return {
-      advantage: { A: redAdvantage, B: -redAdvantage },
+      advantage: { red: redAdvantage, yellow: yellowAdvantage },
       buckets17: buckets
     };
   }
