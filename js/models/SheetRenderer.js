@@ -5,6 +5,7 @@ export default class SheetRenderer {
   constructor(svg, sheetDimensions) {
     this.svg = svg;
     this.dimensions = sheetDimensions;
+    this.pathSelectionHandler = null;
     
     // Calculate scales and dimensions
     this.setupScales();
@@ -186,6 +187,11 @@ export default class SheetRenderer {
       path.attr("data-velocity", pathData.velocity)
           .attr("data-broom-y", pathData.broomY)
           .attr("data-spin", pathData.spinDirection);
+
+      const contactFlag = pathData.isCollision || pathData.isHitStone || pathData.makesContact === true;
+      path.attr("data-makes-contact", contactFlag ? "true" : "false");
+
+      path.style("cursor", "pointer");
           
       // Add mouseover/mouseout event handlers
       path.on("mouseover", function(event) {
@@ -231,6 +237,8 @@ export default class SheetRenderer {
           infoText = `Collision Path - Vel: ${pathData.velocity} m/s, Broom: ${pathData.broomY.toFixed(2)} m, Spin: ${pathData.spinDirection}`;
         } else if (pathData.isHitStone) {
           infoText = `Stone Movement - ${pathData.spinDirection}`;
+        } else if (pathData.makesContact) {
+          infoText = `Contact Path - Vel: ${pathData.velocity} m/s, Broom: ${pathData.broomY.toFixed(2)} m, Spin: ${pathData.spinDirection}`;
         } else {
           infoText = `Vel: ${pathData.velocity} m/s, Broom: ${pathData.broomY.toFixed(2)} m, Spin: ${pathData.spinDirection}`;
         }
@@ -271,6 +279,13 @@ export default class SheetRenderer {
         // Remove any temporary highlighting classes
         svg.selectAll(".path-visualization").classed("highlight-path", false);
       });
+
+      path.on("click", (event) => {
+        event.stopPropagation();
+        if (this.pathSelectionHandler) {
+          this.pathSelectionHandler(pathData, event);
+        }
+      });
     }
       
     return path;
@@ -297,6 +312,10 @@ export default class SheetRenderer {
   clearPaths() {
     this.svg.selectAll(".path").remove();
     this.svg.selectAll(".velocity-legend").remove();
+  }
+
+  setPathSelectionHandler(handler) {
+    this.pathSelectionHandler = typeof handler === "function" ? handler : null;
   }
   
   // Draw velocity legend

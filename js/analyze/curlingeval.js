@@ -229,7 +229,18 @@ function evaluatePosition17(shotNumber,hammerTeam,stones,skillPercent=50){
   return {advantage:{red:scoreRed,yellow:-scoreRed}, buckets17:buckets};
 }
 
-// Export
-if (typeof module!=='undefined') module.exports={evaluatePosition17};
-// Export for ES modules
-export { evaluatePosition17 };
+// Export helpers for CommonJS and browser environments.
+const evaluatorApi = { evaluatePosition17 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = evaluatorApi;
+} else if (typeof globalThis !== 'undefined') {
+  // Attach to the global scope so ES module imports that rely on side-effects
+  // can still access the evaluator without breaking CommonJS consumers.
+  const existing = globalThis.CurlingEval || {};
+  globalThis.CurlingEval = Object.assign(existing, evaluatorApi);
+} else if (typeof window !== 'undefined') {
+  // Fallback for environments without globalThis support.
+  const existing = window.CurlingEval || {};
+  window.CurlingEval = Object.assign(existing, evaluatorApi);
+}

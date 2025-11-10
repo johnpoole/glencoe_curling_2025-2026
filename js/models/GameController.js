@@ -37,6 +37,10 @@ export default class GameController {
     
     // Set up click handler for broom placement
     this.setupBroomClickHandler();
+
+    if (this.renderer && typeof this.renderer.setPathSelectionHandler === "function") {
+      this.renderer.setPathSelectionHandler((pathData) => this.applyPathSettingsFromPath(pathData));
+    }
     
     // Set up UI event handlers
     this.setupEventHandlers();
@@ -82,6 +86,13 @@ export default class GameController {
     // Shot exploration buttons
     document.getElementById("showPathsBtn").addEventListener("click", () => this.showMultiplePaths());
     document.getElementById("hidePathsBtn").addEventListener("click", () => this.hidePaths());
+
+    const nonContactToggle = document.getElementById("showNonContactPaths");
+    if (nonContactToggle) {
+      nonContactToggle.addEventListener("change", () => {
+        this.updateNonContactPathVisibility();
+      });
+    }
     
     // Game control buttons
     document.getElementById("nextThrowBtn").addEventListener("click", () => this.nextThrow());
@@ -571,6 +582,9 @@ export default class GameController {
     
     const velocityStep = document.getElementById("velocityStep") ?
       parseFloat(document.getElementById("velocityStep").value) : 0.1;
+
+    const showNonContactPaths = document.getElementById("showNonContactPaths") ?
+      document.getElementById("showNonContactPaths").checked : true;
     
     // Set range for broom positions
     const broomYPositions = [];
@@ -628,6 +642,14 @@ export default class GameController {
           
           // Use the metadata to check if the stone stopped properly on the sheet
           const pathIsValid = trajectory.stoppedOnSheet === true;
+
+          // Determine whether this trajectory would contact an existing stone
+          const makesContact = this.pathTouchesExistingStone(trajectory, p);
+
+          // Skip non-contact paths if the toggle is disabled
+          if (!showNonContactPaths && !makesContact) {
+            return;
+          }
           
           // Either show all paths or only the valid ones
           if (!filterPathsEnabled || pathIsValid) {
@@ -636,7 +658,8 @@ export default class GameController {
               trajectory, 
               color: colorWithOpacity,
               velocity,
-              spinDirection: spinDirection.label
+              spinDirection: spinDirection.label,
+              makesContact
             });
             
             // Create path data object with all info needed for hover
@@ -644,7 +667,9 @@ export default class GameController {
               velocity,
               broomY, 
               spinDirection: spinDirection.label,
-              color: colorWithOpacity
+              spinDirectionValue: spinDirection.value,
+              color: colorWithOpacity,
+              makesContact
             };
             
             // Draw the path with semi-transparent color and pass path data
@@ -753,9 +778,11 @@ export default class GameController {
                   velocity: velocity,
                   broomY: broomY,
                   spinDirection: spinDirection.label,
+                  spinDirectionValue: spinDirection.value,
                   color: collisionColor,
                   isCollision: true,
-                  collisionId: collisionId
+                  collisionId: collisionId,
+                  makesContact: true
                 };
                 
                 // Always draw the throwing stone path
@@ -789,7 +816,8 @@ export default class GameController {
                         spinDirection: `Stone ${stoneId}`,
                         color: "rgba(180, 50, 220, 0.9)",
                         isHitStone: true,
-                        collisionId: collisionId
+                        collisionId: collisionId,
+                        makesContact: true
                       };
                       
                       // This is an existing stone that moved due to collision - bright purple with high opacity
@@ -834,8 +862,62 @@ export default class GameController {
     
     // Add legend for velocities and spin directions
     this.renderer.drawVelocityLegend(pathDetails);
+
+    this.updateNonContactPathVisibility();
   }
   
+  updateNonContactPathVisibility() {
+    const toggle = document.getElementById("showNonContactPaths");
+    const showNonContact = !toggle || toggle.checked;
+
+    if (!this.renderer || !this.renderer.svg) {
+      return;
+    }
+
+    this.renderer.svg.selectAll(".path-visualization").each(function() {
+      const pathSelection = d3.select(this);
+      const attrVal = pathSelection.attr("data-makes-contact");
+      const hasContact = attrVal === "true";
+      const shouldDisplay = showNonContact || hasContact || attrVal === null;
+      pathSelection.style("display", shouldDisplay ? null : "none");
+    });
+  }
+
+  applyPathSettingsFromPath(pathData) {
+    if (!pathData || typeof pathData.velocity !== "number" || Number.isNaN(pathData.velocity)) {
+      return;
+    }
+
+    if (!pathData.spinDirectionValue) {
+      return;
+    }
+
+    const velocityInput = document.getElementById("V0");
+    if (velocityInput) {
+      velocityInput.value = pathData.velocity;
+      velocityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      velocityInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    const velocityValueDisplay = document.getElementById("V0-value");
+    if (velocityValueDisplay) {
+      velocityValueDisplay.textContent = pathData.velocity.toString();
+    }
+
+    const turnSelect = document.getElementById("turn");
+    if (turnSelect) {
+      turnSelect.value = pathData.spinDirectionValue;
+      turnSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    if (typeof pathData.broomY === "number" && !Number.isNaN(pathData.broomY)) {
+      this.broomPos = { x: this.sheetDimensions.TEE_X, y: pathData.broomY };
+      if (this.renderer && typeof this.renderer.updateBroom === "function") {
+        this.renderer.updateBroom(this.broom, this.broomPos);
+      }
+    }
+  }
+
   // Hide all paths
   hidePaths() {
     this.renderer.clearPaths();
@@ -1266,10 +1348,40 @@ export default class GameController {
     try {
       // Import the curlingeval.js module using dynamic import
       import('../analyze/curlingeval.js').then(module => {
-        // Access evaluatePosition17 function from the module (handle both ESM and CommonJS exports)
-        const evaluatePosition17 = module.evaluatePosition17;
-        
+        // Resolve the evaluator across ES module, CommonJS, and global fallback shapes.
+        let evaluatePosition17 = null;
+
+        if (module && typeof module.evaluatePosition17 === 'function') {
+          evaluatePosition17 = module.evaluatePosition17;
+        } else if (module && module.default) {
+          if (typeof module.default === 'function') {
+            evaluatePosition17 = module.default;
+          } else if (typeof module.default.evaluatePosition17 === 'function') {
+            evaluatePosition17 = module.default.evaluatePosition17;
+          }
+        } else if (typeof module === 'function') {
+          evaluatePosition17 = module;
+        }
+
         if (!evaluatePosition17) {
+          let globalScope = null;
+          if (typeof globalThis !== 'undefined') {
+            globalScope = globalThis;
+          } else if (typeof window !== 'undefined') {
+            globalScope = window;
+          }
+
+          if (globalScope) {
+            const globalApi = globalScope.CurlingEval || {};
+            if (typeof globalApi.evaluatePosition17 === 'function') {
+              evaluatePosition17 = globalApi.evaluatePosition17;
+            } else if (typeof globalScope.evaluatePosition17 === 'function') {
+              evaluatePosition17 = globalScope.evaluatePosition17;
+            }
+          }
+        }
+        
+        if (typeof evaluatePosition17 !== 'function') {
           console.error("evaluatePosition17 function not found in imported module", module);
           return;
         }
@@ -1310,17 +1422,7 @@ export default class GameController {
           result = this.calculateActualEndResult(stoneData, hammerTeam);
         } else {
           // Use the new evaluatePosition17 function
-          // Make sure evaluatePosition17 is defined before calling it
-          if (typeof evaluatePosition17 === 'function') {
-            result = evaluatePosition17(shotNumber, hammerTeam, stoneData);
-          } else {
-            console.error("evaluatePosition17 is not a function", typeof evaluatePosition17);
-            // Return a default result if the function isn't available
-            result = {
-              advantage: { red: 0, yellow: 0 },
-              buckets17: { 0: 1.0 }
-            };
-          }
+          result = evaluatePosition17(shotNumber, hammerTeam, stoneData);
         }
         
         // Prepare for display
@@ -1457,18 +1559,19 @@ export default class GameController {
           const heightPercent = maxBucketValue > 0 ? (entry.value / maxBucketValue) * 100 : 0;
           const barHeight = Math.max(1, Math.round(heightPercent * 0.8));
           
-          // Determine bar color based on bucket value and team colors
+          // Determine bar color based on scoring team relative to hammer
+          const teamColors = { red: '#e74c3c', yellow: '#f1c40f' };
           let barColor = '#888888'; // Default gray for 0 (blank end)
-          
-          // In curlingeval.js:
-          // - Positive buckets: hammer team scores
-          // - Negative buckets: non-hammer team scores (steals)
-          if (hammerTeam === 'A') { // Red has hammer
-            if (entry.bucket < 0) barColor = '#f1c40f'; // Yellow team steals
-            if (entry.bucket > 0) barColor = '#e74c3c'; // Red team scores
-          } else { // Yellow has hammer
-            if (entry.bucket < 0) barColor = '#e74c3c'; // Red team steals
-            if (entry.bucket > 0) barColor = '#f1c40f'; // Yellow team scores
+
+          if (entry.bucket > 0) {
+            // Positive buckets are scores for the hammer team
+            const hammerColor = teamColors[hammerTeam] ?? '#e74c3c';
+            barColor = hammerColor;
+          } else if (entry.bucket < 0) {
+            // Negative buckets are steals for the non-hammer team
+            const stealTeam = hammerTeam === 'red' ? 'yellow' : 'red';
+            const stealColor = teamColors[stealTeam] ?? '#f1c40f';
+            barColor = stealColor;
           }
           
           histogramHTML += `
@@ -1622,6 +1725,45 @@ export default class GameController {
       advantage: { red: redAdvantage, yellow: yellowAdvantage },
       buckets17: buckets
     };
+  }
+
+  // Determine if a simulated path would contact any existing stone
+  pathTouchesExistingStone(trajectory, params) {
+    if (!this.stones || this.stones.length === 0) return false;
+    if (!trajectory || trajectory.length === 0) return false;
+
+    const stoneRadius = (params && typeof params.R === 'number' && params.R > 0)
+      ? params.R
+      : (this.uiGetters && typeof this.uiGetters.Rrock === 'function'
+          ? this.uiGetters.Rrock()
+          : 0.145);
+
+    if (!stoneRadius || stoneRadius <= 0) return false;
+
+  const collisionDistanceSq = Math.pow(2 * stoneRadius, 2);
+
+  // Ignore the earliest portion of the trajectory near release to avoid false positives
+  const startIndex = trajectory.length > 5 ? 5 : 0;
+
+    for (const stone of this.stones) {
+      if (!stone) continue;
+      if (stone.inPlay === false) continue;
+
+      const sx = stone.x;
+      const sy = stone.y;
+
+      for (let i = startIndex; i < trajectory.length; i++) {
+        const point = trajectory[i];
+        if (!point) continue;
+        const dx = point.x - sx;
+        const dy = point.y - sy;
+        if ((dx * dx + dy * dy) <= collisionDistanceSq) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
   
   // Simulate a scenario with potential collisions

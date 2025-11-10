@@ -22,7 +22,7 @@
       <div class="row">
         <span class="input-label">Throw Weight (m/s)</span>
         <div class="slider-container">
-          <input id="V0" type="range" step="0.01" min="1.76" max="4" value="1.93">
+          <input id="V0" type="range" step="0.01" min="1.76" max="3" value="1.93">
           <span class="slider-value" id="V0-value">1.93</span>
         </div>
       </div>
@@ -290,6 +290,13 @@
               <input type="checkbox" id="showCollisions" checked>
               <label for="showCollisions" style="display: inline; margin: 0;">Show Collision Paths</label>
             </div>
+          </div>
+          <div class="control-group">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="showNonContactPaths" checked>
+              <label for="showNonContactPaths" style="display: inline; margin: 0;">Show Non-Contact Paths</label>
+            </div>
+            <div class="small">Clear to hide trajectories that never touch another stone</div>
           </div>
           <div class="control-group">
             <div style="display: flex; align-items: center; gap: 10px;">
