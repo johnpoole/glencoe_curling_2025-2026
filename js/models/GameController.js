@@ -16,6 +16,8 @@ export default class GameController {
     this.broomPos = { x: renderer.dimensions.TEE_X, y: 0 }; // Default on the button
     this.anim = null;
     this.sheetDimensions = renderer.dimensions;
+    this.cachedEvaluatePosition17 = null;
+    this.lastGeneratedPaths = [];
     
     // Game state management
     this.gameState = {
@@ -653,15 +655,6 @@ export default class GameController {
           
           // Either show all paths or only the valid ones
           if (!filterPathsEnabled || pathIsValid) {
-            // Add to our collection
-            allPaths.push({ 
-              trajectory, 
-              color: colorWithOpacity,
-              velocity,
-              spinDirection: spinDirection.label,
-              makesContact
-            });
-            
             // Create path data object with all info needed for hover
             const pathDataObj = {
               velocity,
@@ -671,9 +664,22 @@ export default class GameController {
               color: colorWithOpacity,
               makesContact
             };
-            
+
             // Draw the path with semi-transparent color and pass path data
-            this.renderer.drawPath(trajectory, colorWithOpacity, true, pathDataObj);
+            const pathSelection = this.renderer.drawPath(trajectory, colorWithOpacity, true, pathDataObj);
+
+            // Add to our collection for later analysis
+            allPaths.push({ 
+              trajectory, 
+              color: colorWithOpacity,
+              velocity,
+              spinDirection: spinDirection.label,
+              spinDirectionValue: spinDirection.value,
+              broomY,
+              makesContact,
+              pathData: pathDataObj,
+              pathSelection
+            });
             
             // Only add to legend once per velocity/spin combination
             if (!addedToLegend) {
@@ -864,6 +870,8 @@ export default class GameController {
     this.renderer.drawVelocityLegend(pathDetails);
 
     this.updateNonContactPathVisibility();
+    this.lastGeneratedPaths = allPaths;
+    this.highlightBestAdvantagePath(allPaths);
   }
   
   updateNonContactPathVisibility() {
@@ -881,6 +889,188 @@ export default class GameController {
       const shouldDisplay = showNonContact || hasContact || attrVal === null;
       pathSelection.style("display", shouldDisplay ? null : "none");
     });
+
+    if (Array.isArray(this.lastGeneratedPaths) && this.lastGeneratedPaths.length > 0) {
+      this.highlightBestAdvantagePath(this.lastGeneratedPaths);
+    }
+  }
+
+  async highlightBestAdvantagePath(pathRecords) {
+    if (!Array.isArray(pathRecords) || pathRecords.length === 0) {
+      return;
+    }
+
+    const toggle = document.getElementById("showNonContactPaths");
+    const showNonContact = !toggle || toggle.checked;
+
+    try {
+      const evaluator = await this.resolveEvaluator();
+      if (typeof evaluator !== "function") {
+        return;
+      }
+
+      const hammerTeam = this.getHammerTeam();
+      const shotNumber = Math.min(this.gameState.stonesThrown, 15);
+      const baseStoneData = this.buildStoneData(this.stones);
+      const teeX = this.sheetDimensions.TEE_X;
+      const teamToThrow = this.currentTeam === "yellow" ? "yellow" : "red";
+
+      let bestRecord = null;
+      let bestAdvantage = -Infinity;
+
+      pathRecords.forEach(record => {
+        if (!record || !record.trajectory || record.trajectory.length === 0) {
+          return;
+        }
+
+        if (record.trajectory.stoppedOnSheet === false) {
+          return;
+        }
+
+        if (!showNonContact && !record.makesContact) {
+          return;
+        }
+
+        if (!record.pathSelection) {
+          return;
+        }
+
+        const finalState = record.trajectory[record.trajectory.length - 1];
+        if (!finalState) {
+          return;
+        }
+
+        const hypotheticalData = baseStoneData.slice();
+        hypotheticalData.push([teamToThrow, finalState.x - teeX, finalState.y]);
+
+        let evaluation;
+        try {
+          evaluation = evaluator(shotNumber, hammerTeam, hypotheticalData);
+        } catch (error) {
+          console.error("Error evaluating hypothetical path:", error);
+          return;
+        }
+
+        if (!evaluation || !evaluation.advantage) {
+          return;
+        }
+
+        const advantageValue = teamToThrow === "red" ? evaluation.advantage.red : evaluation.advantage.yellow;
+        if (typeof advantageValue !== "number" || Number.isNaN(advantageValue)) {
+          return;
+        }
+
+        record.advantage = advantageValue;
+        if (record.pathData) {
+          record.pathData.advantage = advantageValue;
+        }
+
+        if (!bestRecord || advantageValue > bestAdvantage) {
+          bestAdvantage = advantageValue;
+          bestRecord = record;
+        }
+      });
+
+      pathRecords.forEach(record => {
+        if (!record || !record.pathSelection) {
+          return;
+        }
+
+        const isBest = record === bestRecord && isFinite(bestAdvantage);
+        const strokeColor = isBest ? "#ff3b30" : record.color;
+        record.pathSelection.style("stroke", strokeColor);
+
+        if (record.advantage !== undefined) {
+          record.pathSelection.attr("data-advantage", record.advantage.toFixed(3));
+        } else {
+          record.pathSelection.attr("data-advantage", null);
+        }
+
+        record.pathSelection.attr("data-best-advantage", isBest ? "true" : null);
+      });
+    } catch (error) {
+      console.error("Error while highlighting best advantage path:", error);
+    }
+  }
+
+  async resolveEvaluator() {
+    if (typeof this.cachedEvaluatePosition17 === "function") {
+      return this.cachedEvaluatePosition17;
+    }
+
+    try {
+      const module = await import('../analyze/curlingeval.js');
+      let evaluatePosition17 = null;
+
+      if (module && typeof module.evaluatePosition17 === 'function') {
+        evaluatePosition17 = module.evaluatePosition17;
+      } else if (module && module.default) {
+        if (typeof module.default === 'function') {
+          evaluatePosition17 = module.default;
+        } else if (typeof module.default.evaluatePosition17 === 'function') {
+          evaluatePosition17 = module.default.evaluatePosition17;
+        }
+      } else if (typeof module === 'function') {
+        evaluatePosition17 = module;
+      }
+
+      if (!evaluatePosition17) {
+        let globalScope = null;
+        if (typeof globalThis !== 'undefined') {
+          globalScope = globalThis;
+        } else if (typeof window !== 'undefined') {
+          globalScope = window;
+        }
+
+        if (globalScope) {
+          const globalApi = globalScope.CurlingEval || {};
+          if (typeof globalApi.evaluatePosition17 === 'function') {
+            evaluatePosition17 = globalApi.evaluatePosition17;
+          } else if (typeof globalScope.evaluatePosition17 === 'function') {
+            evaluatePosition17 = globalScope.evaluatePosition17;
+          }
+        }
+      }
+
+      if (typeof evaluatePosition17 === 'function') {
+        this.cachedEvaluatePosition17 = evaluatePosition17;
+        return evaluatePosition17;
+      }
+
+      console.error("evaluatePosition17 function not found in curling evaluator module", module);
+    } catch (error) {
+      console.error("Error loading curling evaluator:", error);
+    }
+
+    return null;
+  }
+
+  getHammerTeam() {
+    let hammerTeam = 'red';
+
+    if (this.gameState.currentEnd > 1 && this.gameState.endScores.length > 0) {
+      const lastEnd = this.gameState.endScores[this.gameState.endScores.length - 1];
+      if (lastEnd.red > 0) {
+        hammerTeam = 'yellow';
+      } else if (lastEnd.yellow > 0) {
+        hammerTeam = 'red';
+      }
+    }
+
+    return hammerTeam;
+  }
+
+  buildStoneData(stonesArray) {
+    const teeX = this.sheetDimensions.TEE_X;
+
+    return (stonesArray || [])
+      .filter(stone => stone && stone.inPlay !== false)
+      .map(stone => {
+        const team = stone.team === 'yellow' ? 'yellow' : 'red';
+        const x = stone.x - teeX;
+        const y = stone.y;
+        return [team, x, y];
+      });
   }
 
   applyPathSettingsFromPath(pathData) {
@@ -921,6 +1111,7 @@ export default class GameController {
   // Hide all paths
   hidePaths() {
     this.renderer.clearPaths();
+    this.lastGeneratedPaths = [];
   }
   
   // Update the game UI with current state
@@ -1381,6 +1572,10 @@ export default class GameController {
           }
         }
         
+        if (typeof evaluatePosition17 === 'function') {
+          this.cachedEvaluatePosition17 = evaluatePosition17;
+        }
+
         if (typeof evaluatePosition17 !== 'function') {
           console.error("evaluatePosition17 function not found in imported module", module);
           return;
