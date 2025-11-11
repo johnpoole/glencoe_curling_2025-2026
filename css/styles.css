@@ -791,3 +791,58 @@ kbd {
   font-weight: bold;
   background-color: #24344a;
 }
+
+/* Enhanced Accuracy Display Styles */
+.accuracy-display {
+  background: rgba(74, 163, 255, 0.05);
+  border: 1px solid rgba(74, 163, 255, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.accuracy-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 5px 0;
+  padding: 4px 0;
+}
+
+.accuracy-metric .label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accuracy-metric .value {
+  font-weight: bold;
+  color: var(--accent);
+}
+
+.accuracy-bar {
+  width: 60px;
+  height: 4px;
+  background: rgba(74, 163, 255, 0.2);
+  border-radius: 2px;
+  margin-left: 10px;
+  overflow: hidden;
+}
+
+.accuracy-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.shot-difficulty {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.difficulty-easy { background: var(--accent2); color: var(--bg); }
+.difficulty-medium { background: var(--warn); color: var(--bg); }
+.difficulty-hard { background: #ff4757; color: white; }

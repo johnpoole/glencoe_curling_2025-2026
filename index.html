@@ -181,6 +181,16 @@
       <div class="position-evaluation" id="positionEvaluation">
         <!-- Position evaluation results will be displayed here -->
       </div>
+      
+      <hr style="border:0;border-top:1px solid #2a3a52; margin:10px 0;">
+      <div class="accuracy-display" id="accuracyDisplay">
+        <h4 style="margin: 0 0 10px 0; color: #4a5a7a;">Shot Accuracy Analysis</h4>
+        <div id="accuracyMetrics">
+          <div style="color: #9fb3c8; font-size: 12px; text-align: center; padding: 20px;">
+            Generate paths to see accuracy analysis
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -297,6 +307,20 @@
               <label for="showNonContactPaths" style="display: inline; margin: 0;">Show Non-Contact Paths</label>
             </div>
             <div class="small">Clear to hide trajectories that never touch another stone</div>
+          </div>
+          <div class="control-group">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="showAccuracyData" checked>
+              <label for="showAccuracyData" style="display: inline; margin: 0;">Show Shot Accuracy</label>
+            </div>
+            <div class="small">Display distance/direction error probabilities for each path</div>
+          </div>
+          <div class="control-group">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="checkbox" id="applyExecutionErrors" checked>
+              <label for="applyExecutionErrors" style="display: inline; margin: 0;">Apply Execution Errors</label>
+            </div>
+            <div class="small">Apply realistic human execution errors based on shot type</div>
           </div>
           <div class="control-group">
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -612,5 +636,9 @@
     });
   });
 </script>
+
+<!-- Database accuracy display using actual shot counts -->
+<script src="js/database-accuracy.js"></script>
+
 </body>
 </html>

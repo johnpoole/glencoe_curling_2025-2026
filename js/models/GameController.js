@@ -1,5 +1,6 @@
 import { detectCollisions } from './Physics.js';
 import { simulateStone, simulateAll, simulateDraw } from './Simulation.js';
+import { EnhancedAccuracyExtension } from './EnhancedAccuracyIntegration.js';
 // We'll import the simple evaluator directly in evaluateCurrentPosition
 
 /**
@@ -18,6 +19,9 @@ export default class GameController {
     this.sheetDimensions = renderer.dimensions;
     this.cachedEvaluatePosition17 = null;
     this.lastGeneratedPaths = [];
+    
+    // Initialize enhanced accuracy system
+    this.enhancedAccuracy = new EnhancedAccuracyExtension(this);
     
     // Game state management
     this.gameState = {
@@ -137,6 +141,49 @@ export default class GameController {
   // Generate a unique ID for stones
   generateStoneId() {
     return this.stones.length > 0 ? Math.max(...this.stones.map(s => s.id)) + 1 : 1;
+  }
+  
+  // Apply execution errors based on shot type and accuracy data
+  applyExecutionErrors(V0, omega0) {
+    // Accuracy data from 12,800 shot database
+    const accuracyData = {
+      "Draw": { weightErrorStd: 0.158 * 0.3, dirErrorStd: 2.8 },
+      "Take-out": { weightErrorStd: 0.751 * 0.3, dirErrorStd: 6.7 },
+      "Guard": { weightErrorStd: 0.179 * 0.3, dirErrorStd: 3.4 },
+      "Hit and Roll": { weightErrorStd: 0.380 * 0.3, dirErrorStd: 5.0 },
+      "Freeze": { weightErrorStd: 0.113 * 0.3, dirErrorStd: 2.2 }
+    };
+    
+    // Determine shot type based on weight
+    let shotType;
+    if (V0 < 1.9) shotType = "Draw";
+    else if (V0 < 2.3) shotType = "Guard"; 
+    else if (V0 < 2.7) shotType = "Hit and Roll";
+    else shotType = "Take-out";
+    
+    const errors = accuracyData[shotType];
+    
+    // Generate random errors using normal distribution (Box-Muller transform)
+    const u1 = Math.random();
+    const u2 = Math.random();
+    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(2 * Math.PI * u2);
+    
+    // Apply errors with realistic standard deviations
+    const weightError = z0 * errors.weightErrorStd;
+    const directionError = z1 * errors.dirErrorStd;
+    
+    // Small omega variation (roughly 10% std dev)
+    const omegaError = z0 * 0.1 * omega0;
+    
+    // Log the execution errors for debugging
+    console.log(`Shot Type: ${shotType}, Weight: ${V0.toFixed(3)} → ${(V0 + weightError).toFixed(3)} (${weightError > 0 ? '+' : ''}${weightError.toFixed(3)}), Direction: ${directionError > 0 ? '+' : ''}${directionError.toFixed(1)}°`);
+    
+    return {
+      V0: Math.max(0.1, V0 + weightError), // Ensure positive velocity
+      omega0: omega0 + omegaError,
+      directionError: directionError
+    };
   }
   
   // Update stone visuals on the sheet
@@ -1181,10 +1228,20 @@ export default class GameController {
     
     // Run the original throw logic
     const start = this.sheetDimensions.START;
-    const V0 = this.uiGetters.V0();
+    let V0 = this.uiGetters.V0();
     const omega0 = this.uiGetters.omega0();
     const turn = this.uiGetters.turn();
     const sweep = this.uiGetters.sweep();
+    
+    // Apply execution errors based on shot type and accuracy data (if enabled)
+    let executionErrors = { V0: V0, omega0: omega0, directionError: 0 };
+    if (this.uiGetters.applyExecutionErrors()) {
+      executionErrors = this.applyExecutionErrors(V0, omega0);
+    }
+    
+    V0 = executionErrors.V0;
+    const actualOmega0 = executionErrors.omega0;
+    const directionError = executionErrors.directionError;
     
     // Create a new stone
     const stoneId = this.generateStoneId();
@@ -1239,7 +1296,7 @@ export default class GameController {
       restitution: 0.8
     };
     
-    // Setup the throw
+    // Setup the throw with execution errors
     const dir = {
       ux: this.broomPos.x - stone.x,
       uy: this.broomPos.y - stone.y
@@ -1248,9 +1305,19 @@ export default class GameController {
     dir.ux /= mag;
     dir.uy /= mag;
     
-    stone.vx = V0 * dir.ux;
-    stone.vy = V0 * dir.uy;
-    stone.w = turn === "in" ? Math.abs(omega0) : -Math.abs(omega0);
+    // Apply direction error by rotating the direction vector
+    const errorAngleRad = directionError * Math.PI / 180;
+    const cosError = Math.cos(errorAngleRad);
+    const sinError = Math.sin(errorAngleRad);
+    
+    const errorDir = {
+      ux: dir.ux * cosError - dir.uy * sinError,
+      uy: dir.ux * sinError + dir.uy * cosError
+    };
+    
+    stone.vx = V0 * errorDir.ux;
+    stone.vy = V0 * errorDir.uy;
+    stone.w = turn === "in" ? Math.abs(actualOmega0) : -Math.abs(actualOmega0);
     
     // Clear previous paths
     this.renderer.clearPaths();

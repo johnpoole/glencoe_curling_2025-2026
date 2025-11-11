@@ -32,7 +32,9 @@ export default class UIManager {
       showCollisions: () => document.getElementById("showCollisions") ?
         document.getElementById("showCollisions").checked : true,
       filterPaths: () => document.getElementById("filterPaths") ?
-        document.getElementById("filterPaths").checked : true
+        document.getElementById("filterPaths").checked : true,
+      applyExecutionErrors: () => document.getElementById("applyExecutionErrors") ?
+        document.getElementById("applyExecutionErrors").checked : true
     };
     
     // Metric display elements
