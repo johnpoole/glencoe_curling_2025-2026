@@ -145,13 +145,13 @@ export default class GameController {
   
   // Apply execution errors based on shot type and accuracy data
   applyExecutionErrors(V0, omega0) {
-    // Accuracy data from 12,800 shot database (scaled down for realistic errors)
+    // Much smaller, more predictable errors
     const accuracyData = {
-      "Draw": { weightErrorStd: 0.02, dirErrorStd: 0.5 },
-      "Take-out": { weightErrorStd: 0.08, dirErrorStd: 1.2 },
-      "Guard": { weightErrorStd: 0.03, dirErrorStd: 0.6 },
-      "Hit and Roll": { weightErrorStd: 0.05, dirErrorStd: 0.8 },
-      "Freeze": { weightErrorStd: 0.015, dirErrorStd: 0.4 }
+      "Draw": { weightErrorStd: 0.01, dirErrorStd: 0.1 },      // Very precise
+      "Take-out": { weightErrorStd: 0.03, dirErrorStd: 0.3 },  // Moderate variation
+      "Guard": { weightErrorStd: 0.015, dirErrorStd: 0.15 },   // Precise
+      "Hit and Roll": { weightErrorStd: 0.02, dirErrorStd: 0.2 }, // Small variation
+      "Freeze": { weightErrorStd: 0.005, dirErrorStd: 0.05 }   // Extremely precise
     };
     
     // Determine shot type based on weight
@@ -173,8 +173,8 @@ export default class GameController {
     const weightError = z0 * errors.weightErrorStd;
     const directionError = z1 * errors.dirErrorStd;
     
-    // Small omega variation (roughly 10% std dev)
-    const omegaError = z0 * 0.1 * omega0;
+    // Small omega variation (roughly 5% std dev)
+    const omegaError = z0 * 0.05 * omega0;
     
     // Log the execution errors for debugging
     console.log(`Shot Type: ${shotType}, Weight: ${V0.toFixed(3)} → ${(V0 + weightError).toFixed(3)} (${weightError > 0 ? '+' : ''}${weightError.toFixed(3)}), Direction: ${directionError > 0 ? '+' : ''}${directionError.toFixed(1)}°`);
