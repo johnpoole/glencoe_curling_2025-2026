@@ -145,13 +145,13 @@ export default class GameController {
   
   // Apply execution errors based on shot type and accuracy data
   applyExecutionErrors(V0, omega0) {
-    // Accuracy data from 12,800 shot database
+    // Accuracy data from 12,800 shot database (scaled down for realistic errors)
     const accuracyData = {
-      "Draw": { weightErrorStd: 0.158 * 0.3, dirErrorStd: 2.8 },
-      "Take-out": { weightErrorStd: 0.751 * 0.3, dirErrorStd: 6.7 },
-      "Guard": { weightErrorStd: 0.179 * 0.3, dirErrorStd: 3.4 },
-      "Hit and Roll": { weightErrorStd: 0.380 * 0.3, dirErrorStd: 5.0 },
-      "Freeze": { weightErrorStd: 0.113 * 0.3, dirErrorStd: 2.2 }
+      "Draw": { weightErrorStd: 0.02, dirErrorStd: 0.5 },
+      "Take-out": { weightErrorStd: 0.08, dirErrorStd: 1.2 },
+      "Guard": { weightErrorStd: 0.03, dirErrorStd: 0.6 },
+      "Hit and Roll": { weightErrorStd: 0.05, dirErrorStd: 0.8 },
+      "Freeze": { weightErrorStd: 0.015, dirErrorStd: 0.4 }
     };
     
     // Determine shot type based on weight
