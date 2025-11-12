@@ -153,6 +153,41 @@
         </div>
         <div class="small" style="margin-top:8px">Stones are added automatically when you click Throw. Click a stone to select it for throwing or removing.</div>
       </fieldset>
+
+      <!-- Photo Upload for Stone Detection -->
+      <fieldset style="border: 2px solid #4aa3ff;">
+        <legend style="font-weight: bold; color: #4aa3ff;">Photo Stone Detection</legend>
+        
+        <div class="photo-upload-area" id="photoUploadArea" style="
+          border: 2px dashed #4aa3ff; 
+          border-radius: 8px; 
+          padding: 20px; 
+          text-align: center; 
+          margin: 10px 0; 
+          background-color: #f8f9fa;
+          cursor: pointer;
+          transition: background-color 0.3s;
+        ">
+          <div id="uploadPrompt">
+            📷 Drag & drop overhead photo<br>
+            or <span style="color: #4aa3ff; text-decoration: underline;">click to browse</span>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" style="display: none;">
+          <canvas id="photoCanvas" style="display: none; max-width: 100%; margin-top: 10px;"></canvas>
+        </div>
+        
+        <div class="buttons" style="display: none;" id="photoControls">
+          <button id="detectStonesBtn" class="secondary" style="background-color: #4aa3ff; color: white;">Detect Stones</button>
+          <button id="clearPhotoBtn" class="warn">Clear Photo</button>
+        </div>
+        
+        <div id="detectionStatus" style="margin-top: 10px; font-size: 0.9em; color: #666;"></div>
+        
+        <div class="small" style="margin-top: 8px;">
+          Take an overhead photo of the curling house and upload it to automatically detect stone positions. 
+          Best results with clear lighting and minimal shadows.
+        </div>
+      </fieldset>
       
       <!-- Shot Exploration Button -->
       <div style="margin-top: 20px; text-align: right;">

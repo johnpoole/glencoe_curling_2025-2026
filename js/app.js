@@ -5,6 +5,7 @@ import SheetDimensions from './models/SheetDimensions.js';
 import SheetRenderer from './models/SheetRenderer.js';
 import UIManager from './models/UIManager.js';
 import GameController from './models/GameController.js';
+import PhotoStoneDetection from './PhotoStoneDetection.js';
 import { detectCollisions } from './models/Physics.js';
 
 // Initialize the application when the DOM is fully loaded
@@ -21,4 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Create the game controller
   const gameController = new GameController(renderer, uiManager.getUIGetters(), uiManager);
+  
+  // Initialize photo stone detection
+  const photoDetection = new PhotoStoneDetection(gameController);
 });
