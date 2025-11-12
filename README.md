@@ -1,16 +1,29 @@
 # Glencoe Curling Simulator 2025-2026
 
-A sophisticated web-based curling simulator built with D3.js that provides realistic stone physics, game management, and strategic position analysis.
+A sophisticated web-based curling simulator built with D3.js that provides realistic stone physics, game management, photo-based stone detection, and strategic position analysis.
 
 ![Curling Simulator](base_broom_placement.png)
+
+## 🎮 Live Demo
+
+**[Play the Simulator Online](https://johnpoole.github.io/glencoe_curling_2025-2026/)**
+
+*No installation required - runs directly in your browser!*
 
 ## Features
 
 ### 🥌 Realistic Physics Simulation
 - **Accurate stone dynamics**: Implements realistic curling physics including friction, rotation, and ice conditions
+- **Execution errors**: Human-like shot variation based on 12,800 shot database
 - **Interactive sweeping**: Press and hold spacebar during shots to simulate active sweeping
 - **Collision detection**: Stones interact naturally with each other and boundaries
 - **Variable ice conditions**: Adjust curl and straight factors to simulate different ice conditions
+
+### 📷 Photo Stone Detection (NEW!)
+- **Upload real photos**: Take overhead shots of curling houses and upload them
+- **Automatic detection**: Computer vision identifies red and yellow stones
+- **Real game analysis**: Load actual game situations into the simulator
+- **Easy workflow**: Drag & drop photos, click detect, analyze positions
 
 ### 🎮 Complete Game Management
 - **Full 16-stone ends**: Alternating shots between red and yellow teams
@@ -19,7 +32,8 @@ A sophisticated web-based curling simulator built with D3.js that provides reali
 - **Game state tracking**: Tracks current end, stones thrown, and team turns
 
 ### 📊 Strategic Analysis
-- **Position evaluation**: Real-time analysis of stone positions and scoring probabilities
+- **Shot accuracy metrics**: Real-time display of execution probabilities by shot type
+- **Position evaluation**: Analysis of stone positions and scoring probabilities
 - **Advantage calculation**: Shows which team has the positional advantage
 - **Probability buckets**: Displays likelihood of different scoring outcomes (-8 to +8 points)
 - **Interactive histogram**: Visual representation of scoring probabilities by team color
