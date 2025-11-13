@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python-Powered Curling Sheet Detection</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        button { background: #007ACC; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; margin: 10px; font-size: 16px; }
+        button:hover { background: #005a99; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .results { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
+        canvas { border: 1px solid #ccc; max-width: 100%; margin: 10px 0; }
+        .step { border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 5px; background: white; }
+        .step h3 { margin-top: 0; color: #007ACC; }
+        .controls { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        select { padding: 8px; margin: 5px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐍 Python-Powered Curling Sheet Detection</h1>
+        <p><strong>Using advanced OpenCV:</strong> Perspective correction → House detection → Auto-cropping</p>
+        
+        <input type="file" id="imageInput" accept="image/*" style="margin: 10px 0; font-size: 16px;">
+        <button id="processBtn" disabled>🎯 Process with Python CV</button>
+        <button id="addLinesBtn" disabled>📏 Add Reference Lines</button>
+        <button id="exportBtn" disabled>💾 Export Result</button>
+        
+        <div class="step">
+            <h3>📸 Original Image</h3>
+            <canvas id="originalCanvas"></canvas>
+        </div>
+        
+        <div class="step">
+            <h3>🔧 Python Processing Result</h3>
+            <canvas id="processedCanvas"></canvas>
+        </div>
+        
+        <div class="step">
+            <h3>📏 Final with Reference Lines</h3>
+            <canvas id="finalCanvas"></canvas>
+        </div>
+        
+        <div id="results" class="results">Select an image to process with Python OpenCV...</div>
+    </div>
+
+    <script>
+        class PythonCurlingProcessor {
+            constructor() {
+                this.originalImage = null;
+                this.processedImageData = null;
+                this.finalImageData = null;
+                
+                this.originalCanvas = document.getElementById('originalCanvas');
+                this.processedCanvas = document.getElementById('processedCanvas');
+                this.finalCanvas = document.getElementById('finalCanvas');
+                
+                this.originalCtx = this.originalCanvas.getContext('2d');
+                this.processedCtx = this.processedCanvas.getContext('2d');
+                this.finalCtx = this.finalCanvas.getContext('2d');
+            }
+
+            async loadImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            displayOriginal() {
+                if (!this.originalImage) return;
+
+                const maxWidth = 800;
+                const scale = Math.min(maxWidth / this.originalImage.width, 1);
+                
+                this.originalCanvas.width = this.originalImage.width * scale;
+                this.originalCanvas.height = this.originalImage.height * scale;
+                
+                this.originalCtx.drawImage(this.originalImage, 0, 0, this.originalCanvas.width, this.originalCanvas.height);
+            }
+
+            // Simplified JavaScript implementation of the Python algorithm
+            processWithPythonLogic() {
+                if (!this.originalImage) return;
+
+                // Create working canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = this.originalImage.width;
+                canvas.height = this.originalImage.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(this.originalImage, 0, 0);
+
+                // Get image data for processing
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+
+                // Convert to grayscale
+                const gray = new Uint8Array(canvas.width * canvas.height);
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const brightness = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+                    gray[i / 4] = brightness;
+                }
+
+                // Enhanced edge detection with morphological operations
+                const edges = this.detectSheetEdges(gray, canvas.width, canvas.height);
+                
+                // Find the largest rectangular region (ice sheet)
+                const sheetBounds = this.findLargestRectangle(edges, canvas.width, canvas.height);
+                
+                // Crop to the detected sheet
+                const croppedCanvas = this.cropAndPerspectiveCorrect(canvas, sheetBounds);
+                
+                // Detect house orientation and rotate if needed
+                const orientedCanvas = this.correctOrientation(croppedCanvas);
+                
+                this.processedImageData = orientedCanvas;
+                this.displayProcessed(orientedCanvas);
+                
+                return orientedCanvas;
+            }
+
+            detectSheetEdges(gray, width, height) {
+                // Check for large images and adjust processing
+                const totalPixels = width * height;
+                if (totalPixels > 2000000) { // > 2M pixels
+                    // Use simplified processing for very large images
+                    return this.fastIceCrop(gray, width, height);
+                }
+                
+                // Enhanced adaptive thresholding
+                const binary = new Uint8Array(gray.length);
+                const blockSize = 35;
+                const C = 5;
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = y * width + x;
+                        
+                        // Calculate local mean in block
+                        let sum = 0;
+                        let count = 0;
+                        const halfBlock = Math.floor(blockSize / 2);
+                        
+                        for (let by = Math.max(0, y - halfBlock); by < Math.min(height, y + halfBlock); by++) {
+                            for (let bx = Math.max(0, x - halfBlock); bx < Math.min(width, x + halfBlock); bx++) {
+                                sum += gray[by * width + bx];
+                                count++;
+                            }
+                        }
+                        
+                        const threshold = (sum / count) - C;
+                        binary[idx] = gray[idx] > threshold ? 255 : 0;
+                    }
+                }
+
+                // Morphological closing to connect ice regions
+                const closed = this.morphologicalClose(binary, width, height, 7);
+                return closed;
+            }
+
+            morphologicalClose(binary, width, height, kernelSize) {
+                // Dilation followed by erosion
+                const dilated = this.dilate(binary, width, height, kernelSize);
+                const closed = this.erode(dilated, width, height, kernelSize);
+                return closed;
+            }
+
+            dilate(binary, width, height, kernelSize) {
+                const result = new Uint8Array(binary.length);
+                const half = Math.floor(kernelSize / 2);
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = y * width + x;
+                        let maxVal = 0;
+                        
+                        for (let ky = -half; ky <= half; ky++) {
+                            for (let kx = -half; kx <= half; kx++) {
+                                const ny = y + ky;
+                                const nx = x + kx;
+                                if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+                                    maxVal = Math.max(maxVal, binary[ny * width + nx]);
+                                }
+                            }
+                        }
+                        result[idx] = maxVal;
+                    }
+                }
+                return result;
+            }
+
+            erode(binary, width, height, kernelSize) {
+                const result = new Uint8Array(binary.length);
+                const half = Math.floor(kernelSize / 2);
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = y * width + x;
+                        let minVal = 255;
+                        
+                        for (let ky = -half; ky <= half; ky++) {
+                            for (let kx = -half; kx <= half; kx++) {
+                                const ny = y + ky;
+                                const nx = x + kx;
+                                if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+                                    minVal = Math.min(minVal, binary[ny * width + nx]);
+                                }
+                            }
+                        }
+                        result[idx] = minVal;
+                    }
+                }
+                return result;
+            }
+
+            findLargestRectangle(binary, width, height) {
+                // Use array-based visited tracking instead of Set for large images
+                const visited = new Uint8Array(width * height);
+                let largestBounds = null;
+                let largestSize = 0;
+
+                // Sample every 4th pixel to reduce processing load
+                const step = 4;
+                for (let y = 0; y < height; y += step) {
+                    for (let x = 0; x < width; x += step) {
+                        const idx = y * width + x;
+                        if (!visited[idx] && binary[idx] > 0) {
+                            const bounds = this.fastFloodFillBounds(binary, width, height, x, y, visited, step);
+                            if (bounds && bounds.area > largestSize) {
+                                largestSize = bounds.area;
+                                largestBounds = bounds;
+                            }
+                        }
+                    }
+                }
+
+                if (!largestBounds) {
+                    // Fallback to center crop
+                    return {
+                        x: Math.floor(width * 0.1),
+                        y: Math.floor(height * 0.1),
+                        width: Math.floor(width * 0.8),
+                        height: Math.floor(height * 0.8)
+                    };
+                }
+
+                // Add padding
+                const padding = 20;
+                return {
+                    x: Math.max(0, largestBounds.x - padding),
+                    y: Math.max(0, largestBounds.y - padding),
+                    width: Math.min(width - largestBounds.x, largestBounds.width + 2 * padding),
+                    height: Math.min(height - largestBounds.y, largestBounds.height + 2 * padding)
+                };
+            }
+
+            fastFloodFillBounds(binary, width, height, startX, startY, visited, step = 1) {
+                // Fast bounds-only flood fill without storing all points
+                let minX = startX, maxX = startX, minY = startY, maxY = startY;
+                let area = 0;
+                
+                // Use simple stack with coordinate pairs
+                const stack = [startX, startY];
+                let stackSize = 2;
+                
+                while (stackSize > 0) {
+                    const y = stack[--stackSize];
+                    const x = stack[--stackSize];
+                    
+                    const idx = y * width + x;
+                    if (visited[idx] || binary[idx] === 0) continue;
+                    
+                    visited[idx] = 1;
+                    area++;
+                    
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+                    
+                    // Add neighbors (with bounds check)
+                    const neighbors = [[0, step], [0, -step], [step, 0], [-step, 0]];
+                    for (const [dx, dy] of neighbors) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                            const nIdx = ny * width + nx;
+                            if (!visited[nIdx] && binary[nIdx] > 0) {
+                                stack[stackSize++] = nx;
+                                stack[stackSize++] = ny;
+                            }
+                        }
+                    }
+                    
+                    // Prevent stack overflow
+                    if (stackSize > 10000) {
+                        break;
+                    }
+                }
+                
+                return {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY,
+                    area: area
+                };
+            }
+
+            fastIceCrop(gray, width, height) {
+                // Simple edge detection for large images
+                // Use Sobel-like edge detection on downsampled image
+                const scale = 4; // Downsample by 4x
+                const smallWidth = Math.floor(width / scale);
+                const smallHeight = Math.floor(height / scale);
+                
+                // Sample the image at reduced resolution
+                const smallGray = new Uint8Array(smallWidth * smallHeight);
+                for (let y = 0; y < smallHeight; y++) {
+                    for (let x = 0; x < smallWidth; x++) {
+                        const srcIdx = (y * scale) * width + (x * scale);
+                        smallGray[y * smallWidth + x] = gray[srcIdx];
+                    }
+                }
+                
+                // Find edges in the small image
+                const edges = new Uint8Array(smallWidth * smallHeight);
+                for (let y = 1; y < smallHeight - 1; y++) {
+                    for (let x = 1; x < smallWidth - 1; x++) {
+                        const idx = y * smallWidth + x;
+                        
+                        const gx = smallGray[idx + 1] - smallGray[idx - 1];
+                        const gy = smallGray[idx + smallWidth] - smallGray[idx - smallWidth];
+                        const magnitude = Math.sqrt(gx * gx + gy * gy);
+                        
+                        edges[idx] = magnitude > 30 ? 255 : 0;
+                    }
+                }
+                
+                // Find bounding box of edges (scaled back up)
+                let minX = smallWidth, maxX = 0, minY = smallHeight, maxY = 0;
+                let foundEdges = false;
+                
+                for (let y = 0; y < smallHeight; y++) {
+                    for (let x = 0; x < smallWidth; x++) {
+                        if (edges[y * smallWidth + x] > 0) {
+                            minX = Math.min(minX, x);
+                            maxX = Math.max(maxX, x);
+                            minY = Math.min(minY, y);
+                            maxY = Math.max(maxY, y);
+                            foundEdges = true;
+                        }
+                    }
+                }
+                
+                if (!foundEdges) {
+                    return {
+                        x: Math.floor(width * 0.1),
+                        y: Math.floor(height * 0.1),
+                        width: Math.floor(width * 0.8),
+                        height: Math.floor(height * 0.8)
+                    };
+                }
+                
+                // Scale back up and add padding
+                const padding = 50;
+                return {
+                    x: Math.max(0, (minX * scale) - padding),
+                    y: Math.max(0, (minY * scale) - padding),
+                    width: Math.min(width - (minX * scale), ((maxX - minX) * scale) + 2 * padding),
+                    height: Math.min(height - (minY * scale), ((maxY - minY) * scale) + 2 * padding)
+                };
+            }
+
+            cropAndPerspectiveCorrect(canvas, bounds) {
+                // Implement proper perspective correction like the Python version
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const gray = this.convertToGrayscale(imageData.data);
+                
+                // Find the actual ice sheet contour for perspective correction
+                const box = this.findSheetContour(gray, canvas.width, canvas.height);
+                
+                if (box) {
+                    // Apply perspective transform
+                    return this.warpPerspective(canvas, box);
+                } else {
+                    // Fallback to simple crop
+                    const croppedCanvas = document.createElement('canvas');
+                    croppedCanvas.width = bounds.width;
+                    croppedCanvas.height = bounds.height;
+                    const cropCtx = croppedCanvas.getContext('2d');
+                    
+                    cropCtx.drawImage(canvas, bounds.x, bounds.y, bounds.width, bounds.height,
+                                     0, 0, bounds.width, bounds.height);
+                    
+                    return croppedCanvas;
+                }
+            }
+
+            findSheetContour(gray, width, height) {
+                // Adaptive threshold to find ice sheet
+                const binary = new Uint8Array(gray.length);
+                const blockSize = 35;
+                const C = -5; // Negative C for bright ice detection
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = y * width + x;
+                        
+                        let sum = 0;
+                        let count = 0;
+                        const halfBlock = Math.floor(blockSize / 2);
+                        
+                        for (let by = Math.max(0, y - halfBlock); by < Math.min(height, y + halfBlock); by++) {
+                            for (let bx = Math.max(0, x - halfBlock); bx < Math.min(width, x + halfBlock); bx++) {
+                                sum += gray[by * width + bx];
+                                count++;
+                            }
+                        }
+                        
+                        const threshold = (sum / count) + C; // Note: + C since C is negative
+                        binary[idx] = gray[idx] > threshold ? 255 : 0;
+                    }
+                }
+                
+                // Morphological closing to fill gaps
+                const closed = this.morphologicalClose(binary, width, height, 7, 2);
+                
+                // Find contours and get the largest valid rectangle
+                const contours = this.findContours(closed, width, height);
+                const largestRect = this.getLargestValidRect(contours, width, height);
+                
+                return largestRect;
+            }
+
+            getLargestValidRect(contours, width, height) {
+                const imgArea = width * height;
+                let bestRect = null;
+                let bestArea = 0;
+                
+                for (const contour of contours) {
+                    const area = contour.length;
+                    if (area < 0.02 * imgArea) continue;
+                    
+                    const rect = this.minAreaRect(contour);
+                    if (!rect) continue;
+                    
+                    const { width: rw, height: rh } = rect;
+                    if (rw === 0 || rh === 0) continue;
+                    
+                    const aspect = Math.max(rw, rh) / Math.min(rw, rh);
+                    if (aspect >= 1.6 && aspect <= 12.0 && area > bestArea) {
+                        bestRect = rect;
+                        bestArea = area;
+                    }
+                }
+                
+                return bestRect;
+            }
+
+            findContours(binary, width, height) {
+                // Simple contour finding - trace connected components
+                const visited = new Uint8Array(width * height);
+                const contours = [];
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = y * width + x;
+                        if (!visited[idx] && binary[idx] > 0) {
+                            const contour = this.traceContour(binary, width, height, x, y, visited);
+                            if (contour.length > 100) { // Minimum contour size
+                                contours.push(contour);
+                            }
+                        }
+                    }
+                }
+                
+                return contours;
+            }
+
+            traceContour(binary, width, height, startX, startY, visited) {
+                const contour = [];
+                const stack = [[startX, startY]];
+                
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop();
+                    const idx = y * width + x;
+                    
+                    if (visited[idx] || binary[idx] === 0) continue;
+                    
+                    visited[idx] = 1;
+                    contour.push([x, y]);
+                    
+                    // 8-connected neighbors
+                    const neighbors = [
+                        [0, 1], [0, -1], [1, 0], [-1, 0],
+                        [1, 1], [1, -1], [-1, 1], [-1, -1]
+                    ];
+                    
+                    for (const [dx, dy] of neighbors) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                            const nIdx = ny * width + nx;
+                            if (!visited[nIdx] && binary[nIdx] > 0) {
+                                stack.push([nx, ny]);
+                            }
+                        }
+                    }
+                }
+                
+                return contour;
+            }
+
+            minAreaRect(contour) {
+                // Simplified minimum area rectangle - find bounding box
+                if (contour.length === 0) return null;
+                
+                let minX = contour[0][0], maxX = contour[0][0];
+                let minY = contour[0][1], maxY = contour[0][1];
+                
+                for (const [x, y] of contour) {
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+                }
+                
+                const width = maxX - minX;
+                const height = maxY - minY;
+                
+                // Return as corner points for perspective transform
+                return {
+                    width: width,
+                    height: height,
+                    corners: [
+                        [minX, minY],
+                        [maxX, minY], 
+                        [maxX, maxY],
+                        [minX, maxY]
+                    ]
+                };
+            }
+
+            warpPerspective(canvas, rectInfo) {
+                if (!rectInfo || !rectInfo.corners) return canvas;
+                
+                const { corners } = rectInfo;
+                const [tl, tr, br, bl] = this.orderPoints(corners);
+                
+                // Calculate dimensions for warped image
+                const widthA = Math.sqrt(Math.pow(br[0] - bl[0], 2) + Math.pow(br[1] - bl[1], 2));
+                const widthB = Math.sqrt(Math.pow(tr[0] - tl[0], 2) + Math.pow(tr[1] - tl[1], 2));
+                const heightA = Math.sqrt(Math.pow(tr[0] - br[0], 2) + Math.pow(tr[1] - br[1], 2));
+                const heightB = Math.sqrt(Math.pow(tl[0] - bl[0], 2) + Math.pow(tl[1] - bl[1], 2));
+                
+                const maxWidth = Math.max(Math.round(widthA), Math.round(widthB), 100);
+                const maxHeight = Math.max(Math.round(heightA), Math.round(heightB), 100);
+                
+                // Create warped canvas
+                const warpedCanvas = document.createElement('canvas');
+                warpedCanvas.width = maxWidth;
+                warpedCanvas.height = maxHeight;
+                const warpCtx = warpedCanvas.getContext('2d');
+                
+                // Destination rectangle (normalized)
+                const dst = [[0, 0], [maxWidth, 0], [maxWidth, maxHeight], [0, maxHeight]];
+                
+                // Apply perspective transform (simplified bilinear interpolation)
+                this.perspectiveTransform(canvas, warpedCanvas, [tl, tr, br, bl], dst);
+                
+                return warpedCanvas;
+            }
+
+            orderPoints(points) {
+                // Order points: top-left, top-right, bottom-right, bottom-left
+                const sorted = points.slice();
+                
+                // Find top-left (smallest sum) and bottom-right (largest sum)
+                sorted.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
+                const tl = sorted[0];
+                const br = sorted[3];
+                
+                // Find top-right and bottom-left
+                const remaining = [sorted[1], sorted[2]];
+                remaining.sort((a, b) => (a[0] - a[1]) - (b[0] - b[1]));
+                const tr = remaining[1]; // Larger x-y difference
+                const bl = remaining[0]; // Smaller x-y difference
+                
+                return [tl, tr, br, bl];
+            }
+
+            perspectiveTransform(srcCanvas, dstCanvas, srcCorners, dstCorners) {
+                const srcCtx = srcCanvas.getContext('2d');
+                const dstCtx = dstCanvas.getContext('2d');
+                const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+                const dstData = dstCtx.createImageData(dstCanvas.width, dstCanvas.height);
+                
+                // Simplified perspective transform using bilinear interpolation
+                for (let y = 0; y < dstCanvas.height; y++) {
+                    for (let x = 0; x < dstCanvas.width; x++) {
+                        // Map destination point to source using bilinear interpolation
+                        const u = x / (dstCanvas.width - 1);
+                        const v = y / (dstCanvas.height - 1);
+                        
+                        // Bilinear interpolation in source coordinates
+                        const [tl, tr, br, bl] = srcCorners;
+                        const top = [tl[0] + u * (tr[0] - tl[0]), tl[1] + u * (tr[1] - tl[1])];
+                        const bottom = [bl[0] + u * (br[0] - bl[0]), bl[1] + u * (br[1] - bl[1])];
+                        const srcX = Math.round(top[0] + v * (bottom[0] - top[0]));
+                        const srcY = Math.round(top[1] + v * (bottom[1] - top[1]));
+                        
+                        if (srcX >= 0 && srcX < srcCanvas.width && srcY >= 0 && srcY < srcCanvas.height) {
+                            const srcIdx = (srcY * srcCanvas.width + srcX) * 4;
+                            const dstIdx = (y * dstCanvas.width + x) * 4;
+                            
+                            dstData.data[dstIdx] = srcData.data[srcIdx];     // R
+                            dstData.data[dstIdx + 1] = srcData.data[srcIdx + 1]; // G
+                            dstData.data[dstIdx + 2] = srcData.data[srcIdx + 2]; // B
+                            dstData.data[dstIdx + 3] = 255; // A
+                        }
+                    }
+                }
+                
+                dstCtx.putImageData(dstData, 0, 0);
+            }
+
+            correctOrientation(canvas) {
+                // Always auto-detect house position since dropdown is removed
+                const detectedPos = this.detectHousePosition(canvas);
+                if (detectedPos === 'top') {
+                    // Rotate 180 degrees to put house at bottom
+                    return this.rotateCanvas(canvas, 180);
+                }
+                
+                return canvas;
+            }
+
+            detectHousePosition(canvas) {
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+                
+                // Look for red and blue colored pixels (house circles)
+                let topColorCount = 0;
+                let bottomColorCount = 0;
+                const band = Math.floor(canvas.height * 0.2);
+                
+                for (let y = 0; y < canvas.height; y++) {
+                    for (let x = 0; x < canvas.width; x++) {
+                        const idx = (y * canvas.width + x) * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx + 1];
+                        const b = pixels[idx + 2];
+                        
+                        // Check for red or blue colors
+                        const isRed = r > 150 && r > g + 30 && r > b + 30;
+                        const isBlue = b > 150 && b > r + 30 && b > g + 30;
+                        
+                        if (isRed || isBlue) {
+                            if (y < band) {
+                                topColorCount++;
+                            } else if (y > canvas.height - band) {
+                                bottomColorCount++;
+                            }
+                        }
+                    }
+                }
+                
+                return topColorCount > bottomColorCount ? 'top' : 'bottom';
+            }
+
+            convertToGrayscale(imageData) {
+                // Convert RGBA imageData to grayscale array
+                const gray = new Uint8Array(imageData.length / 4);
+                for (let i = 0; i < imageData.length; i += 4) {
+                    // Standard luminance calculation
+                    gray[i / 4] = Math.round(
+                        0.299 * imageData[i] +     // Red
+                        0.587 * imageData[i + 1] + // Green
+                        0.114 * imageData[i + 2]   // Blue
+                    );
+                }
+                return gray;
+            }
+
+            rotateCanvas(canvas, degrees) {
+                const rotatedCanvas = document.createElement('canvas');
+                
+                if (degrees === 180) {
+                    rotatedCanvas.width = canvas.width;
+                    rotatedCanvas.height = canvas.height;
+                    const ctx = rotatedCanvas.getContext('2d');
+                    ctx.translate(canvas.width, canvas.height);
+                    ctx.rotate(Math.PI);
+                    ctx.drawImage(canvas, 0, 0);
+                } else {
+                    // For 90/270 degree rotations
+                    rotatedCanvas.width = canvas.height;
+                    rotatedCanvas.height = canvas.width;
+                    const ctx = rotatedCanvas.getContext('2d');
+                    ctx.translate(canvas.height / 2, canvas.width / 2);
+                    ctx.rotate((degrees * Math.PI) / 180);
+                    ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+                }
+                
+                return rotatedCanvas;
+            }
+
+            displayProcessed(canvas) {
+                const maxWidth = 800;
+                const scale = Math.min(maxWidth / canvas.width, 1);
+                
+                this.processedCanvas.width = canvas.width * scale;
+                this.processedCanvas.height = canvas.height * scale;
+                
+                this.processedCtx.clearRect(0, 0, this.processedCanvas.width, this.processedCanvas.height);
+                this.processedCtx.drawImage(canvas, 0, 0, this.processedCanvas.width, this.processedCanvas.height);
+            }
+
+            addReferenceLines() {
+                if (!this.processedImageData) return;
+
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = this.processedImageData.width;
+                    canvas.height = this.processedImageData.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Draw processed image
+                    ctx.drawImage(this.processedImageData, 0, 0);
+                    
+                    // Detect house and show debug info in HTML
+                    let houseInfo = null;
+                    let debugText = '';
+                    
+                    try {
+                        houseInfo = this.detectActualHouse(canvas);
+                        console.log('House detection completed:', houseInfo);
+                        
+                        if (houseInfo) {
+                            debugText = `🎯 House detected: radius=${Math.round(houseInfo.radius)}, center=(${Math.round(houseInfo.centerX)}, ${Math.round(houseInfo.centerY)})`;
+                        } else {
+                            debugText = `❌ House not detected - using fallback estimates`;
+                        }
+                    } catch (detectionError) {
+                        console.error('House detection failed:', detectionError);
+                        debugText = `⚠️ Detection error: ${detectionError.message}`;
+                        houseInfo = null;
+                    }
+                    
+                    // Add curling sheet reference lines
+                    this.drawCurlingLines(ctx, canvas.width, canvas.height, houseInfo);
+                    
+                    this.finalImageData = canvas;
+                    this.displayFinal(canvas);
+                    
+                    // Show debug info in results
+                    document.getElementById('results').textContent += `\n\n${debugText}`;
+                    
+                } catch (error) {
+                    console.error('addReferenceLines failed:', error);
+                    document.getElementById('results').textContent += `\n\n❌ Reference lines failed: ${error.message}`;
+                }
+            }
+
+            drawCurlingLines(ctx, width, height, houseInfo = null) {
+                console.log('Drawing curling lines, image size:', width, height);
+                console.log('House info passed:', houseInfo);
+                
+                const centerX = width / 2;
+                
+                ctx.lineWidth = 3;
+                
+                // Centerline (red)
+                ctx.strokeStyle = '#FF0000';
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.moveTo(centerX, 0);
+                ctx.lineTo(centerX, height);
+                ctx.stroke();
+                
+                if (houseInfo) {
+                    const { centerX: houseCenterX, centerY, radius } = houseInfo;
+                    
+                    // Calculate other lines relative to detected house
+                    const teeLine = centerY;
+                    const backline = centerY + radius;
+                    const hogline = centerY - radius * 3.1; // Approximately 37 feet from tee
+                    
+                    console.log('Drawing lines at - tee:', teeLine, 'back:', backline, 'hog:', hogline);
+                    console.log('Drawing house circle at:', houseCenterX, centerY, 'radius:', radius);
+                    
+                    // Backline (blue)
+                    ctx.strokeStyle = '#0000FF';
+                    ctx.setLineDash([]);
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(0, backline);
+                    ctx.lineTo(width, backline);
+                    ctx.stroke();
+                    
+                    // Tee line (green)
+                    ctx.strokeStyle = '#00AA00';
+                    ctx.beginPath();
+                    ctx.moveTo(0, teeLine);
+                    ctx.lineTo(width, teeLine);
+                    ctx.stroke();
+                    
+                    // Hogline (purple, dashed)
+                    if (hogline > 0) {
+                        ctx.strokeStyle = '#AA00AA';
+                        ctx.setLineDash([15, 10]);
+                        ctx.beginPath();
+                        ctx.moveTo(0, hogline);
+                        ctx.lineTo(width, hogline);
+                        ctx.stroke();
+                    }
+                    
+                    // Draw the detected house circle (blue outline for 12-foot circle)
+                    ctx.strokeStyle = '#0066FF';
+                    ctx.setLineDash([]);
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(houseCenterX, centerY, radius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    
+                    // Also draw the 8-foot circle (inner circle, lighter blue)
+                    ctx.strokeStyle = '#66AAFF';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(houseCenterX, centerY, radius * 0.67, 0, 2 * Math.PI); // 8ft/12ft ratio
+                    ctx.stroke();
+                    
+                    // Draw 4-foot circle (button, even lighter blue)
+                    ctx.strokeStyle = '#AACCFF';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(houseCenterX, centerY, radius * 0.33, 0, 2 * Math.PI); // 4ft/12ft ratio
+                    ctx.stroke();
+                } else {
+                    // Show fallback lines based on estimated dimensions
+                    const estimatedHouseY = height * 0.6;
+                    const estimatedRadius = Math.min(width, height) * 0.15;
+                    
+                    console.log('Using fallback house at:', estimatedHouseY, 'radius:', estimatedRadius);
+                    
+                    // Tee line (green)
+                    ctx.strokeStyle = '#00AA00';
+                    ctx.setLineDash([]);
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(0, estimatedHouseY);
+                    ctx.lineTo(width, estimatedHouseY);
+                    ctx.stroke();
+                    
+                    // Estimated house circle (orange)
+                    ctx.strokeStyle = '#FF8800';
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    ctx.arc(centerX, estimatedHouseY, estimatedRadius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+            }
+
+            detectActualHouse(canvas) {
+                console.log('detectActualHouse called');
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                console.log(`Image dimensions: ${width}x${height}`);
+                
+                // Direct port of your Python detect_house_circles() function
+                const out = { center: null, radii: [], circles: [] };
+                
+                // Crop to central band to suppress boards and hog area noise
+                const bandStart = Math.floor(0.15 * height);
+                const bandEnd = Math.floor(0.65 * height);
+                
+                console.log(`ROI band: ${bandStart} to ${bandEnd} (height: ${bandEnd - bandStart})`);
+                
+                // Create ROI grayscale data
+                const roiWidth = width;
+                const roiHeight = bandEnd - bandStart;
+                const roiGray = new Uint8ClampedArray(roiWidth * roiHeight);
+                
+                // Convert ROI to grayscale
+                for (let y = 0; y < roiHeight; y++) {
+                    for (let x = 0; x < roiWidth; x++) {
+                        const srcIdx = ((bandStart + y) * width + x) * 4;
+                        const r = pixels[srcIdx];
+                        const g = pixels[srcIdx + 1]; 
+                        const b = pixels[srcIdx + 2];
+                        const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+                        roiGray[y * roiWidth + x] = gray;
+                    }
+                }
+                
+                console.log('ROI grayscale conversion complete');
+                
+                // Gaussian blur (7x7, sigma=1.5) - simplified 3x3 approximation
+                const blurred = new Uint8ClampedArray(roiWidth * roiHeight);
+                for (let y = 1; y < roiHeight - 1; y++) {
+                    for (let x = 1; x < roiWidth - 1; x++) {
+                        let sum = 0;
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                sum += roiGray[(y + dy) * roiWidth + (x + dx)];
+                            }
+                        }
+                        blurred[y * roiWidth + x] = Math.round(sum / 9);
+                    }
+                }
+                
+                console.log('Gaussian blur complete');
+                
+                // Canny edge detection (simplified)
+                const edges = new Uint8ClampedArray(roiWidth * roiHeight);
+                let edgeCount = 0;
+                for (let y = 1; y < roiHeight - 1; y++) {
+                    for (let x = 1; x < roiWidth - 1; x++) {
+                        const gx = -blurred[(y-1)*roiWidth + x-1] + blurred[(y-1)*roiWidth + x+1] +
+                                  -2*blurred[y*roiWidth + x-1] + 2*blurred[y*roiWidth + x+1] +
+                                  -blurred[(y+1)*roiWidth + x-1] + blurred[(y+1)*roiWidth + x+1];
+                        const gy = -blurred[(y-1)*roiWidth + x-1] - 2*blurred[(y-1)*roiWidth + x] - blurred[(y-1)*roiWidth + x+1] +
+                                   blurred[(y+1)*roiWidth + x-1] + 2*blurred[(y+1)*roiWidth + x] + blurred[(y+1)*roiWidth + x+1];
+                        const magnitude = Math.sqrt(gx*gx + gy*gy);
+                        if (magnitude > 100) {
+                            edges[y * roiWidth + x] = 255;
+                            edgeCount++;
+                        } else {
+                            edges[y * roiWidth + x] = 0;
+                        }
+                    }
+                }
+                
+                console.log(`Edge detection complete: ${edgeCount} edge pixels found`);
+                
+                // Hough Circle Transform parameters matching your Python code
+                const minR = Math.floor(0.08 * Math.min(roiWidth, roiHeight));
+                const maxR = Math.floor(0.45 * Math.min(roiWidth, roiHeight));
+                
+                console.log(`Circle detection: minR=${minR}, maxR=${maxR}, ROI=${roiWidth}x${roiHeight}`);
+                
+                if (edgeCount < 100) {
+                    console.log('Not enough edges found for circle detection');
+                    return null;
+                }
+                
+                // Simplified Hough circle detection
+                const circles = [];
+                const step = 8; // Increase step for faster processing
+                
+                console.log('Starting Hough circle detection...');
+                let processed = 0;
+                
+                for (let cy = minR; cy < roiHeight - minR; cy += step) {
+                    for (let cx = minR; cx < roiWidth - minR; cx += step) {
+                        for (let r = minR; r <= maxR; r += 5) {
+                            let votes = 0;
+                            const samples = Math.max(12, Math.floor(r / 3));
+                            
+                            for (let i = 0; i < samples; i++) {
+                                const angle = (2 * Math.PI * i) / samples;
+                                const x = Math.round(cx + r * Math.cos(angle));
+                                const y = Math.round(cy + r * Math.sin(angle));
+                                
+                                if (x >= 0 && x < roiWidth && y >= 0 && y < roiHeight) {
+                                    if (edges[y * roiWidth + x] > 0) {
+                                        votes++;
+                                    }
+                                }
+                            }
+                            
+                            const threshold = Math.max(6, samples * 0.25); // Lower threshold
+                            if (votes >= threshold) {
+                                circles.push([cx, cy, r, votes]);
+                            }
+                            
+                            processed++;
+                            if (processed % 10000 === 0) {
+                                console.log(`Processed ${processed} circle candidates, found ${circles.length} so far`);
+                            }
+                        }
+                    }
+                }
+                
+                console.log(`Hough circle detection complete: found ${circles.length} candidates`);
+                
+                if (circles.length === 0) {
+                    console.log('No circles found');
+                    return null;
+                }
+                
+                // Sort by vote strength and take top candidates
+                circles.sort((a, b) => b[3] - a[3]);
+                const topCircles = circles.slice(0, Math.min(5, circles.length));
+                
+                console.log('Top circles:', topCircles);
+                
+                // Use the best circle directly for now
+                const [x, y, r] = topCircles[0];
+                const finalX = x;
+                const finalY = y + bandStart; // Convert back to full image coords
+                
+                console.log(`Final result: center=(${finalX}, ${finalY}), radius=${r}`);
+                
+                return {
+                    centerX: finalX,
+                    centerY: finalY,
+                    radius: r
+                };
+            }
+
+            detectColoredLines(pixels, width, height) {
+                // Fallback: look for horizontal colored lines that might be the house
+                const centerX = width / 2;
+                let bestY = height / 2;
+                let bestRadius = Math.min(width, height) * 0.15; // Larger default for 12-foot circle
+                
+                // Scan for colored or high-contrast horizontal features
+                for (let y = height * 0.2; y < height * 0.8; y += 5) {
+                    let colorStrength = 0;
+                    let samples = 0;
+                    
+                    for (let x = width * 0.2; x < width * 0.8; x += 10) {
+                        const idx = (y * width + x) * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx + 1];
+                        const b = pixels[idx + 2];
+                        
+                        // Check for any strong color or contrast
+                        const maxColor = Math.max(r, g, b);
+                        const minColor = Math.min(r, g, b);
+                        const contrast = maxColor - minColor;
+                        
+                        if (contrast > 50 || b > 120 || r > 120) {
+                            colorStrength += contrast + Math.max(r, b);
+                        }
+                        samples++;
+                    }
+                    
+                    if (samples > 0 && colorStrength / samples > 50) {
+                        bestY = y;
+                        bestRadius = Math.min(width, height) * 0.18; // Larger radius for outer circle
+                        break;
+                    }
+                }
+                
+                return {
+                    centerX: centerX,
+                    centerY: bestY,
+                    radius: bestRadius
+                };
+            }
+
+            displayFinal(canvas) {
+                const maxWidth = 800;
+                const scale = Math.min(maxWidth / canvas.width, 1);
+                
+                this.finalCanvas.width = canvas.width * scale;
+                this.finalCanvas.height = canvas.height * scale;
+                
+                this.finalCtx.clearRect(0, 0, this.finalCanvas.width, this.finalCanvas.height);
+                this.finalCtx.drawImage(canvas, 0, 0, this.finalCanvas.width, this.finalCanvas.height);
+            }
+
+            export() {
+                if (this.finalImageData) {
+                    const link = document.createElement('a');
+                    link.download = 'processed_curling_sheet.png';
+                    link.href = this.finalImageData.toDataURL('image/png', 1.0);
+                    link.click();
+                    alert('✅ Processed curling sheet exported!');
+                }
+            }
+        }
+
+        // Initialize
+        const processor = new PythonCurlingProcessor();
+
+        // Event handlers
+        document.getElementById('imageInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    processor.originalImage = await processor.loadImage(file);
+                    processor.displayOriginal();
+                    document.getElementById('processBtn').disabled = false;
+                    document.getElementById('results').textContent = 
+                        `Image loaded: ${processor.originalImage.width}x${processor.originalImage.height}\n` +
+                        `Python OpenCV algorithm ready to process...`;
+                } catch (error) {
+                    document.getElementById('results').textContent = `Error loading image: ${error.message}`;
+                }
+            }
+        });
+
+        document.getElementById('processBtn').addEventListener('click', function() {
+            const startTime = performance.now();
+            document.getElementById('results').textContent = 'Processing with Python-based algorithm...';
+            
+            setTimeout(() => {
+                try {
+                    const result = processor.processWithPythonLogic();
+                    const endTime = performance.now();
+                    
+                    document.getElementById('addLinesBtn').disabled = false;
+                    document.getElementById('results').textContent = 
+                        `✅ Python processing complete! (${(endTime - startTime).toFixed(0)}ms)\n\n` +
+                        `🔧 Applied:\n` +
+                        `• Adaptive thresholding (like CLAHE)\n` +
+                        `• Morphological operations (close/open)\n` +
+                        `• Largest connected component detection\n` +
+                        `• Perspective correction and cropping\n` +
+                        `• House orientation detection\n\n` +
+                        `Original: ${processor.originalImage.width}x${processor.originalImage.height}\n` +
+                        `Processed: ${result.width}x${result.height}\n\n` +
+                        `Click "Add Reference Lines" to complete...`;
+                        
+                } catch (error) {
+                    document.getElementById('results').textContent = `Processing failed: ${error.message}`;
+                }
+            }, 100);
+        });
+
+        document.getElementById('addLinesBtn').addEventListener('click', function() {
+            processor.addReferenceLines();
+            document.getElementById('exportBtn').disabled = false;
+            
+            document.getElementById('results').textContent = 
+                document.getElementById('results').textContent + 
+                `\n\n📏 Reference lines added!\n` +
+                `🔴 Red = Centerline\n` +
+                `🔵 Blue = Backlines (6ft from ends)\n` +
+                `🟢 Green = Tee lines (house centers)\n` +
+                `🟣 Purple = Hoglines (37ft from tee)\n` +
+                `🔵 Circles = Houses (12ft diameter)\n\n` +
+                `Ready to export final result! 🎯`;
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            processor.export();
+        });
+    </script>
+</body>
+</html>

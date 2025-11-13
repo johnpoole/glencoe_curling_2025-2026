@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calibrated Stone Detection with Drag</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        button { background: #007ACC; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #005a99; }
+        .image-display { border: 2px solid #ddd; border-radius: 5px; margin: 10px 0; }
+        .results { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
+        .detection-overlay { position: relative; display: inline-block; }
+        canvas { border: 1px solid #ccc; }
+        .alert { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Calibrated Stone Detection (With Drag Fix)</h1>
+        <div class="alert">
+            <strong>Fixed:</strong> Detection + Drag functionality restored. Try multiple parameter sets to find what works!
+        </div>
+        
+        <div>
+            <label>Detection Mode:</label>
+            <select id="detectionMode">
+                <option value="original">Original Parameters</option>
+                <option value="sensitive">More Sensitive</option>
+                <option value="aggressive">Very Aggressive</option>
+                <option value="custom">Custom Tuning</option>
+            </select>
+        </div>
+        
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="detectBtn" disabled>Detect Stones</button>
+        <button id="exportBtn" disabled>Export Corrected Coordinates</button>
+        <button id="clearBtn">Clear</button>
+        
+        <div id="imageContainer" style="display: none;">
+            <h3>Detection Results (Drag to Correct)</h3>
+            <div class="detection-overlay">
+                <canvas id="detectionCanvas"></canvas>
+            </div>
+        </div>
+        
+        <div id="results" class="results">Select an image to analyze...</div>
+    </div>
+
+    <script>
+        class CalibratedStoneDetection {
+            constructor() {
+                this.uploadedImage = null;
+                this.detectionCanvas = document.getElementById('detectionCanvas');
+                this.detectionCtx = this.detectionCanvas.getContext('2d');
+                
+                // Drag state
+                this.detectedStones = [];
+                this.cropInfo = null;
+                this.isDragging = false;
+                this.dragIndex = -1;
+                this.dragOffset = { x: 0, y: 0 };
+                
+                this.setupDragHandlers();
+            }
+
+            async loadImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            getDetectionParams() {
+                const mode = document.getElementById('detectionMode').value;
+                
+                switch(mode) {
+                    case 'original':
+                        return {
+                            redThreshold: 130,
+                            redGap: 25,
+                            blueThreshold: 100,
+                            blueGap: 20,
+                            minPixels: 8,
+                            clusterRadius: 70
+                        };
+                    case 'sensitive':
+                        return {
+                            redThreshold: 120,
+                            redGap: 20,
+                            blueThreshold: 95,
+                            blueGap: 15,
+                            minPixels: 6,
+                            clusterRadius: 100
+                        };
+                    case 'aggressive':
+                        return {
+                            redThreshold: 110,
+                            redGap: 15,
+                            blueThreshold: 85,
+                            blueGap: 10,
+                            minPixels: 4,
+                            clusterRadius: 150
+                        };
+                    case 'custom':
+                        return {
+                            redThreshold: 125,
+                            redGap: 22,
+                            blueThreshold: 90,
+                            blueGap: 12,
+                            minPixels: 5,
+                            clusterRadius: 120
+                        };
+                }
+            }
+
+            detectIceRegion(pixels, width, height) {
+                const rowBrightness = new Float32Array(height);
+                for (let y = 0; y < height; y++) {
+                    let sum = 0;
+                    let count = 0;
+                    for (let x = 0; x < width; x += 10) {
+                        const idx = (y * width + x) * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx + 1];
+                        const b = pixels[idx + 2];
+                        const bright = 0.299 * r + 0.587 * g + 0.114 * b;
+                        sum += bright;
+                        count++;
+                    }
+                    rowBrightness[y] = sum / Math.max(1, count);
+                }
+
+                const smooth = new Float32Array(height);
+                const window = 25;
+                for (let y = 0; y < height; y++) {
+                    let s = 0, c = 0;
+                    for (let k = Math.max(0, y - window); k <= Math.min(height - 1, y + window); k++) {
+                        s += rowBrightness[k];
+                        c++;
+                    }
+                    smooth[y] = s / c;
+                }
+
+                const threshold = smooth.reduce((a, b) => a + b) / smooth.length * 1.05;
+                let top = 0, bottom = height - 1;
+                
+                for (let y = 0; y < height; y++) {
+                    if (smooth[y] > threshold) { top = y; break; }
+                }
+                for (let y = height - 1; y >= 0; y--) {
+                    if (smooth[y] > threshold) { bottom = y; break; }
+                }
+
+                return { x: 0, y: top, width: width, height: bottom - top };
+            }
+
+            detectColoredRegions(pixels, width, height, color) {
+                const regions = [];
+                const visited = new Set();
+                const params = this.getDetectionParams();
+                
+                const isTargetColor = (r, g, b) => {
+                    if (color === 'red') {
+                        return r > params.redThreshold && r > g + params.redGap && r > b + params.redGap;
+                    } else if (color === 'blue') {
+                        return b > params.blueThreshold && b > r + params.blueGap && b > g + params.blueGap;
+                    }
+                    return false;
+                };
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const key = y * width + x;
+                        if (visited.has(key)) continue;
+
+                        const idx = key * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx + 1];
+                        const b = pixels[idx + 2];
+
+                        if (!isTargetColor(r, g, b)) continue;
+
+                        const region = [];
+                        const stack = [{ x, y }];
+                        visited.add(key);
+
+                        while (stack.length > 0) {
+                            const { x: cx, y: cy } = stack.pop();
+                            region.push({ x: cx, y: cy });
+
+                            for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+                                const nx = cx + dx;
+                                const ny = cy + dy;
+                                if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+
+                                const nkey = ny * width + nx;
+                                if (visited.has(nkey)) continue;
+
+                                const nidx = nkey * 4;
+                                const nr = pixels[nidx];
+                                const ng = pixels[nidx + 1];
+                                const nb = pixels[nidx + 2];
+
+                                if (isTargetColor(nr, ng, nb)) {
+                                    visited.add(nkey);
+                                    stack.push({ x: nx, y: ny });
+                                }
+                            }
+                        }
+
+                        if (region.length >= params.minPixels) {
+                            regions.push(region);
+                        }
+                    }
+                }
+
+                return regions;
+            }
+
+            groupRegionsIntoStones(regions, team) {
+                if (regions.length === 0) return [];
+
+                const params = this.getDetectionParams();
+                const centers = regions.map(region => {
+                    const sumX = region.reduce((sum, p) => sum + p.x, 0);
+                    const sumY = region.reduce((sum, p) => sum + p.y, 0);
+                    return {
+                        x: sumX / region.length,
+                        y: sumY / region.length,
+                        pixelCount: region.length,
+                        pixels: region,
+                        team: team
+                    };
+                });
+
+                const stoneGroups = [];
+                for (const center of centers) {
+                    let merged = false;
+                    for (const group of stoneGroups) {
+                        const dist = Math.sqrt((center.x - group.x) ** 2 + (center.y - group.y) ** 2);
+                        if (dist < params.clusterRadius) {
+                            const totalPixels = group.pixelCount + center.pixelCount;
+                            group.x = (group.x * group.pixelCount + center.x * center.pixelCount) / totalPixels;
+                            group.y = (group.y * group.pixelCount + center.y * center.pixelCount) / totalPixels;
+                            group.pixelCount = totalPixels;
+                            group.pixels = [...group.pixels, ...center.pixels];
+                            merged = true;
+                            break;
+                        }
+                    }
+                    if (!merged) {
+                        stoneGroups.push(center);
+                    }
+                }
+
+                return stoneGroups.sort((a, b) => b.pixelCount - a.pixelCount);
+            }
+
+            async analyzeImage() {
+                if (!this.uploadedImage) throw new Error('No image loaded');
+
+                const maxDisplayWidth = 800;
+                const scale = Math.min(maxDisplayWidth / this.uploadedImage.width, 1);
+                
+                this.detectionCanvas.width = this.uploadedImage.width * scale;
+                this.detectionCanvas.height = this.uploadedImage.height * scale;
+                
+                this.detectionCtx.drawImage(this.uploadedImage, 0, 0, this.detectionCanvas.width, this.detectionCanvas.height);
+
+                const off = document.createElement('canvas');
+                off.width = this.uploadedImage.width;
+                off.height = this.uploadedImage.height;
+                const offCtx = off.getContext('2d');
+                offCtx.drawImage(this.uploadedImage, 0, 0);
+
+                const fullImageData = offCtx.getImageData(0, 0, off.width, off.height);
+                const crop = this.detectIceRegion(fullImageData.data, off.width, off.height);
+
+                this.detectionCtx.strokeStyle = '#00FF00';
+                this.detectionCtx.lineWidth = 3;
+                this.detectionCtx.strokeRect(
+                    crop.x * scale, 
+                    crop.y * scale, 
+                    crop.width * scale, 
+                    crop.height * scale
+                );
+
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = crop.width;
+                cropCanvas.height = crop.height;
+                const cropCtx = cropCanvas.getContext('2d');
+                cropCtx.drawImage(off, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+
+                const maxProcDim = 1200;
+                let procScale = 1;
+                let procWidth = crop.width;
+                let procHeight = crop.height;
+                if (Math.max(procWidth, procHeight) > maxProcDim) {
+                    procScale = maxProcDim / Math.max(procWidth, procHeight);
+                    procWidth = Math.round(procWidth * procScale);
+                    procHeight = Math.round(procHeight * procScale);
+                }
+
+                const procCanvas = document.createElement('canvas');
+                procCanvas.width = procWidth;
+                procCanvas.height = procHeight;
+                const procCtx = procCanvas.getContext('2d');
+                procCtx.drawImage(cropCanvas, 0, 0, crop.width, crop.height, 0, 0, procWidth, procHeight);
+
+                const procImageData = procCtx.getImageData(0, 0, procWidth, procHeight);
+
+                const redRegions = this.detectColoredRegions(procImageData.data, procWidth, procHeight, 'red');
+                const blueRegions = this.detectColoredRegions(procImageData.data, procWidth, procHeight, 'blue');
+
+                const redStones = this.groupRegionsIntoStones(redRegions, 'red');
+                const blueStones = this.groupRegionsIntoStones(blueRegions, 'blue');
+
+                const finalRedStones = redStones.slice(0, 2);
+                const finalBlueStones = blueStones.slice(0, 1);
+
+                // Store results for dragging
+                this.detectedStones = [...finalRedStones, ...finalBlueStones].map(stone => ({
+                    ...stone,
+                    displayX: (stone.x / procScale + crop.x) * scale,
+                    displayY: (stone.y / procScale + crop.y) * scale,
+                    originalX: stone.x / procScale + crop.x,
+                    originalY: stone.y / procScale + crop.y
+                }));
+                this.cropInfo = { crop, scale, procScale };
+                
+                this.redrawStones();
+
+                return {
+                    stones: [...finalRedStones, ...finalBlueStones],
+                    debug: {
+                        crop,
+                        procScale,
+                        redCandidates: redRegions.length,
+                        blueCandidates: blueRegions.length,
+                        finalRed: finalRedStones.length,
+                        finalBlue: finalBlueStones.length,
+                        params: this.getDetectionParams()
+                    }
+                };
+            }
+            
+            setupDragHandlers() {
+                this.detectionCanvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+                this.detectionCanvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                this.detectionCanvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+                this.detectionCanvas.addEventListener('mouseleave', this.handleMouseUp.bind(this));
+                this.detectionCanvas.style.cursor = 'grab';
+            }
+            
+            handleMouseDown(e) {
+                const rect = this.detectionCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                let closestIndex = -1;
+                let closestDist = 30;
+                
+                this.detectedStones.forEach((stone, index) => {
+                    const dist = Math.sqrt((x - stone.displayX) ** 2 + (y - stone.displayY) ** 2);
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestIndex = index;
+                    }
+                });
+                
+                if (closestIndex >= 0) {
+                    this.isDragging = true;
+                    this.dragIndex = closestIndex;
+                    this.dragOffset.x = x - this.detectedStones[closestIndex].displayX;
+                    this.dragOffset.y = y - this.detectedStones[closestIndex].displayY;
+                    this.detectionCanvas.style.cursor = 'grabbing';
+                    e.preventDefault();
+                }
+            }
+            
+            handleMouseMove(e) {
+                const rect = this.detectionCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                if (this.isDragging && this.dragIndex >= 0) {
+                    this.detectedStones[this.dragIndex].displayX = x - this.dragOffset.x;
+                    this.detectedStones[this.dragIndex].displayY = y - this.dragOffset.y;
+                    
+                    this.detectedStones[this.dragIndex].originalX = 
+                        (this.detectedStones[this.dragIndex].displayX / this.cropInfo.scale) - this.cropInfo.crop.x;
+                    this.detectedStones[this.dragIndex].originalY = 
+                        (this.detectedStones[this.dragIndex].displayY / this.cropInfo.scale) - this.cropInfo.crop.y;
+                    
+                    this.redrawStones();
+                    this.updateResults();
+                } else {
+                    let overStone = false;
+                    this.detectedStones.forEach(stone => {
+                        const dist = Math.sqrt((x - stone.displayX) ** 2 + (y - stone.displayY) ** 2);
+                        if (dist < 30) overStone = true;
+                    });
+                    this.detectionCanvas.style.cursor = overStone ? 'grab' : 'default';
+                }
+            }
+            
+            handleMouseUp(e) {
+                if (this.isDragging) {
+                    this.isDragging = false;
+                    this.dragIndex = -1;
+                    this.detectionCanvas.style.cursor = 'grab';
+                }
+            }
+            
+            redrawStones() {
+                if (!this.uploadedImage || !this.cropInfo) return;
+                
+                const scale = this.cropInfo.scale;
+                this.detectionCtx.clearRect(0, 0, this.detectionCanvas.width, this.detectionCanvas.height);
+                this.detectionCtx.drawImage(this.uploadedImage, 0, 0, this.detectionCanvas.width, this.detectionCanvas.height);
+                
+                const crop = this.cropInfo.crop;
+                this.detectionCtx.strokeStyle = '#00FF00';
+                this.detectionCtx.lineWidth = 3;
+                this.detectionCtx.strokeRect(
+                    crop.x * scale, 
+                    crop.y * scale, 
+                    crop.width * scale, 
+                    crop.height * scale
+                );
+                
+                this.detectedStones.forEach(stone => {
+                    const color = stone.team === 'red' ? '#FF0000' : '#0000FF';
+                    const radius = 25;
+
+                    this.detectionCtx.fillStyle = color + '80';
+                    this.detectionCtx.strokeStyle = color;
+                    this.detectionCtx.lineWidth = 4;
+                    this.detectionCtx.beginPath();
+                    this.detectionCtx.arc(stone.displayX, stone.displayY, radius, 0, 2 * Math.PI);
+                    this.detectionCtx.fill();
+                    this.detectionCtx.stroke();
+
+                    this.detectionCtx.fillStyle = 'white';
+                    this.detectionCtx.font = 'bold 16px Arial';
+                    this.detectionCtx.textAlign = 'center';
+                    this.detectionCtx.fillText(stone.team[0].toUpperCase(), stone.displayX, stone.displayY + 5);
+                });
+            }
+            
+            updateResults() {
+                const results = document.getElementById('results');
+                const params = this.getDetectionParams();
+                
+                let output = '🎯 CALIBRATED DETECTION (DRAG TO CORRECT)\n\n';
+                output += `Detection Mode: ${document.getElementById('detectionMode').value.toUpperCase()}\n`;
+                output += `Parameters: red=${params.redThreshold}, blue=${params.blueThreshold}, radius=${params.clusterRadius}\n\n`;
+                
+                output += `Detected ${this.detectedStones.length} stones:\n\n`;
+                
+                this.detectedStones.forEach((stone, i) => {
+                    output += `${stone.team.toUpperCase()} stone ${i+1}:\n`;
+                    output += `  Display: (${Math.round(stone.displayX)}, ${Math.round(stone.displayY)})\n`;
+                    output += `  Original: (${Math.round(stone.originalX)}, ${Math.round(stone.originalY)})\n`;
+                    output += `  Confidence: ${stone.pixelCount} pixels\n\n`;
+                });
+                
+                output += `🎯 INSTRUCTIONS:\n`;
+                output += `• Try different detection modes if results are poor\n`;
+                output += `• Click and drag circles to correct positions\n`;
+                output += `• Export corrected coordinates for calibration\n`;
+                output += `• Green rectangle = detected ice region`;
+                
+                results.textContent = output;
+            }
+        }
+
+        // UI handlers
+        const imageInput = document.getElementById('imageInput');
+        const detectBtn = document.getElementById('detectBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const imageContainer = document.getElementById('imageContainer');
+        const results = document.getElementById('results');
+        const detector = new CalibratedStoneDetection();
+
+        imageInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    detector.uploadedImage = await detector.loadImage(file);
+                    detectBtn.disabled = false;
+                    results.textContent = `Image loaded: ${detector.uploadedImage.width}x${detector.uploadedImage.height}\nSelect detection mode and click detect...`;
+                } catch (error) {
+                    results.textContent = `Error loading image: ${error.message}`;
+                }
+            }
+        });
+
+        detectBtn.addEventListener('click', async function() {
+            try {
+                results.textContent = 'Running detection...';
+                imageContainer.style.display = 'block';
+                
+                const analysis = await detector.analyzeImage();
+                detector.updateResults();
+                exportBtn.disabled = false;
+                
+            } catch (error) {
+                results.textContent = `Detection failed: ${error.message}`;
+                imageContainer.style.display = 'none';
+            }
+        });
+
+        exportBtn.addEventListener('click', function() {
+            if (detector.detectedStones.length === 0) {
+                alert('No stones detected yet. Please run detection first.');
+                return;
+            }
+            
+            const data = {
+                imageInfo: {
+                    width: detector.uploadedImage.width,
+                    height: detector.uploadedImage.height
+                },
+                cropInfo: detector.cropInfo.crop,
+                detectionParams: detector.getDetectionParams(),
+                correctedStones: detector.detectedStones.map(stone => ({
+                    team: stone.team,
+                    originalCoords: {
+                        x: Math.round(stone.originalX),
+                        y: Math.round(stone.originalY)
+                    },
+                    displayCoords: {
+                        x: Math.round(stone.displayX),
+                        y: Math.round(stone.displayY)
+                    },
+                    confidence: stone.pixelCount
+                }))
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'calibrated_stone_coordinates.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            alert(`Exported ${detector.detectedStones.length} stone coordinates!`);
+        });
+
+        clearBtn.addEventListener('click', function() {
+            imageInput.value = '';
+            detectBtn.disabled = true;
+            exportBtn.disabled = true;
+            imageContainer.style.display = 'none';
+            results.textContent = 'Select an image to analyze...';
+            detector.uploadedImage = null;
+            detector.detectedStones = [];
+        });
+    </script>
+</body>
+</html>

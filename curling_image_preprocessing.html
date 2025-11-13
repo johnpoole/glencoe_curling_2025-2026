@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Curling Image Preprocessing - Lens & Ice Correction</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        button { background: #007ACC; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #005a99; }
+        .controls { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .slider-group { margin: 10px 0; }
+        .slider-group label { display: inline-block; width: 200px; }
+        .slider-group input[type="range"] { width: 300px; }
+        .slider-group span { display: inline-block; width: 80px; text-align: right; }
+        .image-display { border: 2px solid #ddd; border-radius: 5px; margin: 10px 0; }
+        .results { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
+        canvas { border: 1px solid #ccc; max-width: 100%; }
+        .step { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .step h3 { margin-top: 0; color: #007ACC; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥌 Curling Image Preprocessing Pipeline</h1>
+        <p>Step-by-step correction: Lens distortion → Ice cropping → Reference lines → Stone detection</p>
+        
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="loadBtn" disabled>Load Image</button>
+        <button id="exportBtn" disabled>Export Corrected Image</button>
+        
+        <div class="step">
+            <h3>Step 1: Lens Distortion Correction</h3>
+            <div class="controls">
+                <div class="slider-group">
+                    <label>Barrel Distortion:</label>
+                    <input type="range" id="barrelDistortion" min="-0.5" max="0.5" step="0.01" value="0">
+                    <span id="barrelValue">0.00</span>
+                </div>
+                <div class="slider-group">
+                    <label>Pincushion Distortion:</label>
+                    <input type="range" id="pincushionDistortion" min="-0.3" max="0.3" step="0.01" value="0">
+                    <span id="pincushionValue">0.00</span>
+                </div>
+                <div class="slider-group">
+                    <label>Center X Offset:</label>
+                    <input type="range" id="centerXOffset" min="-100" max="100" step="1" value="0">
+                    <span id="centerXValue">0</span>
+                </div>
+                <div class="slider-group">
+                    <label>Center Y Offset:</label>
+                    <input type="range" id="centerYOffset" min="-100" max="100" step="1" value="0">
+                    <span id="centerYValue">0</span>
+                </div>
+                <button id="applyDistortionBtn" disabled>Apply Lens Correction</button>
+            </div>
+            <canvas id="distortionCanvas"></canvas>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Ice Sheet Boundary Detection</h3>
+            <div class="controls">
+                <div class="slider-group">
+                    <label>Brightness Threshold:</label>
+                    <input type="range" id="brightnessThreshold" min="0.8" max="1.3" step="0.01" value="1.05">
+                    <span id="brightnessValue">1.05</span>
+                </div>
+                <div class="slider-group">
+                    <label>Edge Smoothing:</label>
+                    <input type="range" id="edgeSmoothing" min="5" max="50" step="5" value="25">
+                    <span id="edgeSmoothingValue">25</span>
+                </div>
+                <div class="slider-group">
+                    <label>Crop Padding:</label>
+                    <input type="range" id="cropPadding" min="0" max="100" step="5" value="20">
+                    <span id="cropPaddingValue">20</span>
+                </div>
+                <button id="applyCropBtn" disabled>Detect & Crop Ice</button>
+            </div>
+            <canvas id="cropCanvas"></canvas>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Curling Sheet Reference Lines</h3>
+            <div class="controls">
+                <div class="slider-group">
+                    <label>Sheet Length (feet):</label>
+                    <input type="range" id="sheetLength" min="140" max="160" step="1" value="150">
+                    <span id="sheetLengthValue">150</span>
+                </div>
+                <div class="slider-group">
+                    <label>House Diameter (feet):</label>
+                    <input type="range" id="houseDiameter" min="10" max="14" step="0.5" value="12">
+                    <span id="houseDiameterValue">12</span>
+                </div>
+                <div class="slider-group">
+                    <label>Hogline Distance (feet):</label>
+                    <input type="range" id="hoglineDistance" min="35" max="40" step="0.5" value="37">
+                    <span id="hoglineValue">37</span>
+                </div>
+                <button id="drawLinesBtn" disabled>Draw Reference Lines</button>
+            </div>
+            <canvas id="referenceCanvas"></canvas>
+        </div>
+
+        <div id="results" class="results">Select an image to begin preprocessing...</div>
+    </div>
+
+    <script>
+        class CurlingImagePreprocessor {
+            constructor() {
+                this.originalImage = null;
+                this.distortedCanvas = document.getElementById('distortionCanvas');
+                this.distortedCtx = this.distortedCanvas.getContext('2d');
+                this.croppedCanvas = document.getElementById('cropCanvas');
+                this.croppedCtx = this.croppedCanvas.getContext('2d');
+                this.referenceCanvas = document.getElementById('referenceCanvas');
+                this.referenceCtx = this.referenceCanvas.getContext('2d');
+                
+                this.currentDistortedImage = null;
+                this.currentCroppedImage = null;
+                this.iceRegion = null;
+                
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                // Slider updates
+                const sliders = ['barrelDistortion', 'pincushionDistortion', 'centerXOffset', 'centerYOffset', 
+                                'brightnessThreshold', 'edgeSmoothing', 'cropPadding', 
+                                'sheetLength', 'houseDiameter', 'hoglineDistance'];
+                
+                sliders.forEach(id => {
+                    const slider = document.getElementById(id);
+                    const valueSpan = document.getElementById(id.replace('Distance', 'Value').replace('Diameter', 'DiameterValue').replace('Length', 'LengthValue'));
+                    
+                    slider.addEventListener('input', () => {
+                        valueSpan.textContent = slider.value;
+                    });
+                });
+
+                // Real-time distortion preview
+                ['barrelDistortion', 'pincushionDistortion', 'centerXOffset', 'centerYOffset'].forEach(id => {
+                    document.getElementById(id).addEventListener('input', () => {
+                        if (this.originalImage) this.previewDistortionCorrection();
+                    });
+                });
+
+                // Real-time crop preview  
+                ['brightnessThreshold', 'edgeSmoothing', 'cropPadding'].forEach(id => {
+                    document.getElementById(id).addEventListener('input', () => {
+                        if (this.currentDistortedImage) this.previewCrop();
+                    });
+                });
+            }
+
+            async loadImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            previewDistortionCorrection() {
+                if (!this.originalImage) return;
+
+                const maxWidth = 800;
+                const scale = Math.min(maxWidth / this.originalImage.width, 1);
+                
+                this.distortedCanvas.width = this.originalImage.width * scale;
+                this.distortedCanvas.height = this.originalImage.height * scale;
+                
+                // Get distortion parameters
+                const barrel = parseFloat(document.getElementById('barrelDistortion').value);
+                const pincushion = parseFloat(document.getElementById('pincushionDistortion').value);
+                const centerX = parseInt(document.getElementById('centerXOffset').value);
+                const centerY = parseInt(document.getElementById('centerYOffset').value);
+
+                // Apply lens distortion correction
+                this.applyLensDistortionCorrection(this.originalImage, barrel, pincushion, centerX, centerY, scale);
+            }
+
+            applyLensDistortionCorrection(sourceImage, barrel, pincushion, centerXOffset, centerYOffset, scale = 1) {
+                const canvas = this.distortedCanvas;
+                const ctx = this.distortedCtx;
+                
+                // Create temporary canvas at full resolution
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = sourceImage.width;
+                tempCanvas.height = sourceImage.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(sourceImage, 0, 0);
+                
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const correctedData = tempCtx.createImageData(tempCanvas.width, tempCanvas.height);
+                
+                const centerX = tempCanvas.width / 2 + centerXOffset;
+                const centerY = tempCanvas.height / 2 + centerYOffset;
+                const maxRadius = Math.max(tempCanvas.width, tempCanvas.height) / 2;
+                
+                for (let y = 0; y < tempCanvas.height; y++) {
+                    for (let x = 0; x < tempCanvas.width; x++) {
+                        // Distance from center
+                        const dx = x - centerX;
+                        const dy = y - centerY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const normalizedDistance = distance / maxRadius;
+                        
+                        // Apply barrel and pincushion correction
+                        let correctionFactor = 1.0;
+                        if (barrel !== 0) {
+                            correctionFactor += barrel * normalizedDistance * normalizedDistance;
+                        }
+                        if (pincushion !== 0) {
+                            correctionFactor += pincushion * normalizedDistance * normalizedDistance * normalizedDistance * normalizedDistance;
+                        }
+                        
+                        // Calculate source coordinates
+                        const sourceX = centerX + dx * correctionFactor;
+                        const sourceY = centerY + dy * correctionFactor;
+                        
+                        // Bilinear interpolation
+                        const destIndex = (y * tempCanvas.width + x) * 4;
+                        
+                        if (sourceX >= 0 && sourceX < tempCanvas.width - 1 && sourceY >= 0 && sourceY < tempCanvas.height - 1) {
+                            const x1 = Math.floor(sourceX);
+                            const y1 = Math.floor(sourceY);
+                            const x2 = x1 + 1;
+                            const y2 = y1 + 1;
+                            
+                            const wx = sourceX - x1;
+                            const wy = sourceY - y1;
+                            
+                            const p1 = (y1 * tempCanvas.width + x1) * 4;
+                            const p2 = (y1 * tempCanvas.width + x2) * 4;
+                            const p3 = (y2 * tempCanvas.width + x1) * 4;
+                            const p4 = (y2 * tempCanvas.width + x2) * 4;
+                            
+                            for (let c = 0; c < 4; c++) {
+                                const top = imageData.data[p1 + c] * (1 - wx) + imageData.data[p2 + c] * wx;
+                                const bottom = imageData.data[p3 + c] * (1 - wx) + imageData.data[p4 + c] * wx;
+                                correctedData.data[destIndex + c] = top * (1 - wy) + bottom * wy;
+                            }
+                        } else {
+                            // Outside bounds - set to black
+                            correctedData.data[destIndex] = 0;
+                            correctedData.data[destIndex + 1] = 0;
+                            correctedData.data[destIndex + 2] = 0;
+                            correctedData.data[destIndex + 3] = 255;
+                        }
+                    }
+                }
+                
+                tempCtx.putImageData(correctedData, 0, 0);
+                
+                // Store corrected image
+                this.currentDistortedImage = tempCanvas;
+                
+                // Draw scaled version to display canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+            }
+
+            previewCrop() {
+                if (!this.currentDistortedImage) return;
+
+                const brightness = parseFloat(document.getElementById('brightnessThreshold').value);
+                const smoothing = parseInt(document.getElementById('edgeSmoothing').value);
+                const padding = parseInt(document.getElementById('cropPadding').value);
+
+                this.detectAndCropIce(this.currentDistortedImage, brightness, smoothing, padding);
+            }
+
+            detectAndCropIce(sourceCanvas, brightnessThreshold, smoothingWindow, padding) {
+                const ctx = sourceCanvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+                const pixels = imageData.data;
+                
+                // Calculate row brightness
+                const rowBrightness = new Float32Array(sourceCanvas.height);
+                for (let y = 0; y < sourceCanvas.height; y++) {
+                    let sum = 0;
+                    let count = 0;
+                    for (let x = 0; x < sourceCanvas.width; x += 10) {
+                        const idx = (y * sourceCanvas.width + x) * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx + 1];
+                        const b = pixels[idx + 2];
+                        const bright = 0.299 * r + 0.587 * g + 0.114 * b;
+                        sum += bright;
+                        count++;
+                    }
+                    rowBrightness[y] = sum / Math.max(1, count);
+                }
+
+                // Apply smoothing
+                const smooth = new Float32Array(sourceCanvas.height);
+                for (let y = 0; y < sourceCanvas.height; y++) {
+                    let s = 0, c = 0;
+                    for (let k = Math.max(0, y - smoothingWindow); k <= Math.min(sourceCanvas.height - 1, y + smoothingWindow); k++) {
+                        s += rowBrightness[k];
+                        c++;
+                    }
+                    smooth[y] = s / c;
+                }
+
+                // Find ice boundaries
+                const avgBrightness = smooth.reduce((a, b) => a + b) / smooth.length;
+                const threshold = avgBrightness * brightnessThreshold;
+                
+                let top = 0, bottom = sourceCanvas.height - 1;
+                for (let y = 0; y < sourceCanvas.height; y++) {
+                    if (smooth[y] > threshold) { top = y; break; }
+                }
+                for (let y = sourceCanvas.height - 1; y >= 0; y--) {
+                    if (smooth[y] > threshold) { bottom = y; break; }
+                }
+
+                // Add padding and crop
+                top = Math.max(0, top - padding);
+                bottom = Math.min(sourceCanvas.height - 1, bottom + padding);
+                
+                const cropHeight = bottom - top;
+                
+                this.iceRegion = { x: 0, y: top, width: sourceCanvas.width, height: cropHeight };
+                
+                // Create cropped canvas
+                const croppedCanvas = document.createElement('canvas');
+                croppedCanvas.width = sourceCanvas.width;
+                croppedCanvas.height = cropHeight;
+                const croppedCtx = croppedCanvas.getContext('2d');
+                croppedCtx.drawImage(sourceCanvas, 0, top, sourceCanvas.width, cropHeight, 0, 0, sourceCanvas.width, cropHeight);
+                
+                this.currentCroppedImage = croppedCanvas;
+                
+                // Display with crop overlay on original
+                const displayScale = Math.min(800 / sourceCanvas.width, 600 / sourceCanvas.height, 1);
+                this.croppedCanvas.width = sourceCanvas.width * displayScale;
+                this.croppedCanvas.height = sourceCanvas.height * displayScale;
+                
+                this.croppedCtx.clearRect(0, 0, this.croppedCanvas.width, this.croppedCanvas.height);
+                this.croppedCtx.drawImage(sourceCanvas, 0, 0, this.croppedCanvas.width, this.croppedCanvas.height);
+                
+                // Draw crop boundaries
+                this.croppedCtx.strokeStyle = '#00FF00';
+                this.croppedCtx.lineWidth = 3;
+                this.croppedCtx.strokeRect(0, top * displayScale, sourceCanvas.width * displayScale, cropHeight * displayScale);
+                
+                // Update results
+                document.getElementById('results').textContent = 
+                    `Ice region detected: ${this.iceRegion.width}x${this.iceRegion.height} pixels\n` +
+                    `Crop boundaries: top=${top}, bottom=${bottom}\n` +
+                    `Ready for reference line drawing...`;
+            }
+
+            drawReferenceLines() {
+                if (!this.currentCroppedImage) return;
+
+                const sheetLength = parseFloat(document.getElementById('sheetLength').value);
+                const houseDiameter = parseFloat(document.getElementById('houseDiameter').value);
+                const hoglineDistance = parseFloat(document.getElementById('hoglineDistance').value);
+
+                const displayScale = Math.min(800 / this.currentCroppedImage.width, 600 / this.currentCroppedImage.height, 1);
+                
+                this.referenceCanvas.width = this.currentCroppedImage.width * displayScale;
+                this.referenceCanvas.height = this.currentCroppedImage.height * displayScale;
+                
+                // Draw base image
+                this.referenceCtx.clearRect(0, 0, this.referenceCanvas.width, this.referenceCanvas.height);
+                this.referenceCtx.drawImage(this.currentCroppedImage, 0, 0, this.referenceCanvas.width, this.referenceCanvas.height);
+                
+                // Calculate positions based on sheet dimensions
+                const pixelsPerFoot = this.referenceCanvas.height / sheetLength;
+                const centerX = this.referenceCanvas.width / 2;
+                
+                // Assuming bottom is throwing area, top is far end
+                const backlineY = pixelsPerFoot * 6; // 6 feet from back wall
+                const teeLineY = backlineY + pixelsPerFoot * 6; // 6 feet from backline
+                const hoglineNearY = teeLineY + pixelsPerFoot * hoglineDistance; // hogline distance from tee
+                const hoglineFarY = teeLineY - pixelsPerFoot * hoglineDistance; // other hogline
+                
+                this.referenceCtx.lineWidth = 3;
+                
+                // Draw centerline
+                this.referenceCtx.strokeStyle = '#FF0000';
+                this.referenceCtx.beginPath();
+                this.referenceCtx.moveTo(centerX, 0);
+                this.referenceCtx.lineTo(centerX, this.referenceCanvas.height);
+                this.referenceCtx.stroke();
+                
+                // Draw backlines
+                this.referenceCtx.strokeStyle = '#0000FF';
+                this.referenceCtx.beginPath();
+                this.referenceCtx.moveTo(0, backlineY);
+                this.referenceCtx.lineTo(this.referenceCanvas.width, backlineY);
+                this.referenceCtx.moveTo(0, this.referenceCanvas.height - backlineY);
+                this.referenceCtx.lineTo(this.referenceCanvas.width, this.referenceCanvas.height - backlineY);
+                this.referenceCtx.stroke();
+                
+                // Draw tee lines
+                this.referenceCtx.strokeStyle = '#00AA00';
+                this.referenceCtx.beginPath();
+                this.referenceCtx.moveTo(0, teeLineY);
+                this.referenceCtx.lineTo(this.referenceCanvas.width, teeLineY);
+                this.referenceCtx.moveTo(0, this.referenceCanvas.height - teeLineY);
+                this.referenceCtx.lineTo(this.referenceCanvas.width, this.referenceCanvas.height - teeLineY);
+                this.referenceCtx.stroke();
+                
+                // Draw hoglines
+                this.referenceCtx.strokeStyle = '#AA0000';
+                this.referenceCtx.beginPath();
+                this.referenceCtx.moveTo(0, hoglineNearY);
+                this.referenceCtx.lineTo(this.referenceCanvas.width, hoglineNearY);
+                this.referenceCtx.moveTo(0, hoglineFarY);
+                this.referenceCtx.lineTo(this.referenceCanvas.width, hoglineFarY);
+                this.referenceCtx.stroke();
+                
+                // Draw houses (circles)
+                const houseRadius = (houseDiameter * pixelsPerFoot) / 2;
+                this.referenceCtx.strokeStyle = '#0066CC';
+                this.referenceCtx.lineWidth = 2;
+                this.referenceCtx.beginPath();
+                this.referenceCtx.arc(centerX, teeLineY, houseRadius, 0, 2 * Math.PI);
+                this.referenceCtx.arc(centerX, this.referenceCanvas.height - teeLineY, houseRadius, 0, 2 * Math.PI);
+                this.referenceCtx.stroke();
+                
+                // Add labels
+                this.referenceCtx.fillStyle = 'white';
+                this.referenceCtx.strokeStyle = 'black';
+                this.referenceCtx.lineWidth = 1;
+                this.referenceCtx.font = 'bold 16px Arial';
+                this.referenceCtx.textAlign = 'center';
+                
+                const labelText = (text, x, y) => {
+                    this.referenceCtx.strokeText(text, x, y);
+                    this.referenceCtx.fillText(text, x, y);
+                };
+                
+                labelText('CENTERLINE', centerX, 25);
+                labelText('BACKLINE', centerX, backlineY - 10);
+                labelText('TEE LINE', centerX, teeLineY - 10);
+                labelText('HOUSE', centerX, teeLineY + 5);
+                labelText('HOGLINE', centerX, hoglineNearY - 10);
+                
+                document.getElementById('results').textContent = 
+                    `Reference lines drawn!\n` +
+                    `Sheet: ${sheetLength}ft, House: ${houseDiameter}ft, Hogline: ${hoglineDistance}ft\n` +
+                    `Ready for stone detection on properly corrected image.`;
+            }
+        }
+
+        // Initialize
+        const preprocessor = new CurlingImagePreprocessor();
+
+        // Event handlers
+        document.getElementById('imageInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    preprocessor.originalImage = await preprocessor.loadImage(file);
+                    document.getElementById('loadBtn').disabled = false;
+                    document.getElementById('results').textContent = 
+                        `Image loaded: ${preprocessor.originalImage.width}x${preprocessor.originalImage.height}\n` +
+                        `Click "Load Image" to start preprocessing...`;
+                } catch (error) {
+                    document.getElementById('results').textContent = `Error loading image: ${error.message}`;
+                }
+            }
+        });
+
+        document.getElementById('loadBtn').addEventListener('click', function() {
+            preprocessor.previewDistortionCorrection();
+            document.getElementById('applyDistortionBtn').disabled = false;
+            document.getElementById('results').textContent = 
+                `Step 1: Adjust lens distortion sliders and click "Apply Lens Correction"`;
+        });
+
+        document.getElementById('applyDistortionBtn').addEventListener('click', function() {
+            // Distortion already applied in preview
+            document.getElementById('applyCropBtn').disabled = false;
+            preprocessor.previewCrop();
+            document.getElementById('results').textContent = 
+                `Step 2: Adjust ice detection parameters and click "Detect & Crop Ice"`;
+        });
+
+        document.getElementById('applyCropBtn').addEventListener('click', function() {
+            // Crop already applied in preview
+            document.getElementById('drawLinesBtn').disabled = false;
+            document.getElementById('results').textContent = 
+                `Step 3: Adjust curling sheet dimensions and click "Draw Reference Lines"`;
+        });
+
+        document.getElementById('drawLinesBtn').addEventListener('click', function() {
+            preprocessor.drawReferenceLines();
+            document.getElementById('exportBtn').disabled = false;
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            if (preprocessor.currentCroppedImage) {
+                const link = document.createElement('a');
+                link.download = 'corrected_curling_image.png';
+                link.href = preprocessor.currentCroppedImage.toDataURL();
+                link.click();
+                
+                alert('Corrected image exported! This can now be used for accurate stone detection.');
+            }
+        });
+    </script>
+</body>
+</html>

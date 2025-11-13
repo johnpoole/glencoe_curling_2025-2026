@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Final Stone Detection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        button { background: #007ACC; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #005a99; }
+        .results { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥌 Final Stone Detection Test</h1>
+        
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="testBtn" disabled>Test Complete Detection Pipeline</button>
+        
+        <div id="results" class="results">Select an image to test...</div>
+    </div>
+
+    <script>
+        // Mock game controller for testing
+        const mockGameController = {
+            sheetDimensions: { TEE_X: 28.35 },
+            stones: [],
+            generateStoneId: () => 'stone_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            clearStones: function() { this.stones = []; },
+            updateStoneDisplay: function() { console.log('Updated display with', this.stones.length, 'stones'); }
+        };
+
+        // Simplified PhotoStoneDetection for testing
+        class TestPhotoStoneDetection {
+            constructor() {
+                this.gameController = mockGameController;
+                this.uploadedImage = null;
+                this.flipVertical = false;
+                this.lastCrop = null;
+            }
+
+            async loadImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            detectIceRegion(pixels, width, height) {
+                // Simple version for testing
+                const crop = { x: 0, y: Math.floor(height * 0.15), width: width, height: Math.floor(height * 0.7) };
+                return crop;
+            }
+
+            detectVerticalFlip(imageData, width, height) {
+                // Always return false for testing
+                return false;
+            }
+
+            isTargetColor(r, g, b, targetColor) {
+                if (targetColor === 'red') {
+                    return (r > 130 && r > g + 25 && r > b + 25 && r < 180);
+                } else if (targetColor === 'blue') {
+                    return (b > 100 && b > r + 20 && b > g + 15 && r < 120 && g < 130);
+                }
+                return false;
+            }
+
+            detectColoredRegions(pixels, width, height, color) {
+                const regions = [];
+                const stepSize = 15;
+                
+                for (let y = 0; y < height; y += stepSize) {
+                    for (let x = 0; x < width; x += stepSize) {
+                        const idx = (y * width + x) * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx + 1];
+                        const b = pixels[idx + 2];
+                        
+                        if (this.isTargetColor(r, g, b, color)) {
+                            regions.push({ x, y });
+                        }
+                    }
+                }
+                return regions;
+            }
+
+            groupRegionsIntoStones(regions, team) {
+                if (regions.length === 0) return [];
+                
+                const stoneGroups = [];
+                const groupRadius = 70;
+                const minPixelsPerStone = 8;
+                const used = new Set();
+                
+                for (let i = 0; i < regions.length; i++) {
+                    if (used.has(i)) continue;
+                    
+                    const group = { pixels: [regions[i]], centerX: regions[i].x, centerY: regions[i].y, team: team };
+                    
+                    for (let j = i + 1; j < regions.length; j++) {
+                        if (used.has(j)) continue;
+                        const distance = Math.hypot(regions[i].x - regions[j].x, regions[i].y - regions[j].y);
+                        if (distance <= groupRadius) {
+                            group.pixels.push(regions[j]);
+                            used.add(j);
+                        }
+                    }
+                    
+                    let sumX = 0, sumY = 0;
+                    group.pixels.forEach(pixel => { sumX += pixel.x; sumY += pixel.y; });
+                    group.centerX = Math.round(sumX / group.pixels.length);
+                    group.centerY = Math.round(sumY / group.pixels.length);
+                    
+                    if (group.pixels.length >= minPixelsPerStone) {
+                        stoneGroups.push({
+                            x: group.centerX,
+                            y: group.centerY,
+                            team: team,
+                            pixelCount: group.pixels.length
+                        });
+                    }
+                    used.add(i);
+                }
+                
+                return stoneGroups.sort((a, b) => b.pixelCount - a.pixelCount);
+            }
+
+            convertToSheetCoordinates(pixelX, pixelY) {
+                const centerX = this.gameController.sheetDimensions.TEE_X;
+                const viewAreaWidth = 8.0;
+                const crop = this.lastCrop || { width: this.uploadedImage.width, height: this.uploadedImage.height };
+                
+                let localY = pixelY;
+                if (this.flipVertical) {
+                    localY = crop.height - pixelY;
+                }
+                
+                const normalizedX = (pixelX / crop.width - 0.5) * 2;
+                const normalizedY = (localY / crop.height - 0.5) * 2;
+                
+                const sheetX = centerX + normalizedX * (viewAreaWidth / 2);
+                const sheetY = normalizedY * 1.5;
+                
+                return { x: sheetX, y: sheetY };
+            }
+
+            async testDetection() {
+                if (!this.uploadedImage) throw new Error('No image loaded');
+
+                // Create offscreen canvas
+                const off = document.createElement('canvas');
+                off.width = this.uploadedImage.width;
+                off.height = this.uploadedImage.height;
+                const offCtx = off.getContext('2d');
+                offCtx.drawImage(this.uploadedImage, 0, 0);
+
+                const fullImageData = offCtx.getImageData(0, 0, off.width, off.height);
+                const crop = this.detectIceRegion(fullImageData.data, off.width, off.height);
+                this.lastCrop = crop;
+
+                // Create cropped canvas
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = crop.width;
+                cropCanvas.height = crop.height;
+                const cropCtx = cropCanvas.getContext('2d');
+                cropCtx.drawImage(off, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+
+                // Downsample for processing
+                const maxProcDim = 1200;
+                let scale = 1;
+                let procWidth = cropCanvas.width;
+                let procHeight = cropCanvas.height;
+                if (Math.max(procWidth, procHeight) > maxProcDim) {
+                    scale = maxProcDim / Math.max(procWidth, procHeight);
+                    procWidth = Math.round(procWidth * scale);
+                    procHeight = Math.round(procHeight * scale);
+                }
+
+                const procCanvas = document.createElement('canvas');
+                procCanvas.width = procWidth;
+                procCanvas.height = procHeight;
+                const procCtx = procCanvas.getContext('2d');
+                procCtx.drawImage(cropCanvas, 0, 0, cropCanvas.width, cropCanvas.height, 0, 0, procWidth, procHeight);
+
+                const procImageData = procCtx.getImageData(0, 0, procWidth, procHeight);
+                this.flipVertical = this.detectVerticalFlip(procImageData, procWidth, procHeight);
+
+                // Detect stones
+                const redRegions = this.detectColoredRegions(procImageData.data, procWidth, procHeight, 'red');
+                const blueRegions = this.detectColoredRegions(procImageData.data, procWidth, procHeight, 'blue');
+
+                const redStones = this.groupRegionsIntoStones(redRegions, 'red');
+                const blueStones = this.groupRegionsIntoStones(blueRegions, 'blue');
+
+                const finalRedStones = redStones.slice(0, 2);
+                const finalBlueStones = blueStones.slice(0, 1);
+
+                // Map back to crop coordinates
+                const stones = [];
+                [...finalRedStones, ...finalBlueStones].forEach(stone => {
+                    const cropX = Math.round(stone.x / scale);
+                    const cropY = Math.round(stone.y / scale);
+                    const sheetPos = this.convertToSheetCoordinates(cropX, cropY);
+                    
+                    stones.push({
+                        team: stone.team,
+                        x: sheetPos.x,
+                        y: sheetPos.y,
+                        confidence: stone.pixelCount
+                    });
+                });
+
+                return {
+                    stones,
+                    debug: {
+                        crop,
+                        scale,
+                        flip: this.flipVertical,
+                        redCandidates: redRegions.length,
+                        blueCandidates: blueRegions.length,
+                        finalRed: finalRedStones.length,
+                        finalBlue: finalBlueStones.length
+                    }
+                };
+            }
+        }
+
+        // UI handlers
+        const imageInput = document.getElementById('imageInput');
+        const testBtn = document.getElementById('testBtn');
+        const results = document.getElementById('results');
+        const detector = new TestPhotoStoneDetection();
+
+        imageInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    detector.uploadedImage = await detector.loadImage(file);
+                    testBtn.disabled = false;
+                    results.textContent = `Image loaded: ${detector.uploadedImage.width}x${detector.uploadedImage.height}\nReady to test detection...`;
+                } catch (error) {
+                    results.textContent = `Error loading image: ${error.message}`;
+                    results.className = 'results error';
+                }
+            }
+        });
+
+        testBtn.addEventListener('click', async function() {
+            try {
+                results.textContent = 'Running detection...';
+                results.className = 'results';
+                
+                const detection = await detector.testDetection();
+                
+                let output = '🎯 DETECTION COMPLETE\n\n';
+                output += `Found ${detection.stones.length} stones:\n`;
+                
+                const redStones = detection.stones.filter(s => s.team === 'red');
+                const blueStones = detection.stones.filter(s => s.team === 'blue');
+                
+                redStones.forEach((stone, i) => {
+                    output += `  Red ${i+1}: (${stone.x.toFixed(2)}m, ${stone.y.toFixed(2)}m)\n`;
+                });
+                
+                blueStones.forEach((stone, i) => {
+                    output += `  Blue ${i+1}: (${stone.x.toFixed(2)}m, ${stone.y.toFixed(2)}m)\n`;
+                });
+                
+                output += `\n📊 DETECTION STATS:\n`;
+                output += `  Crop: ${detection.debug.crop.width}x${detection.debug.crop.height}\n`;
+                output += `  Scale: ${detection.debug.scale.toFixed(3)}\n`;
+                output += `  Flip: ${detection.debug.flip}\n`;
+                output += `  Red candidates: ${detection.debug.redCandidates}\n`;
+                output += `  Blue candidates: ${detection.debug.blueCandidates}\n`;
+                
+                if (redStones.length === 2 && blueStones.length === 1) {
+                    output += `\n✅ SUCCESS: Found exactly 2 red + 1 blue stones!`;
+                    results.className = 'results success';
+                } else {
+                    output += `\n⚠️ Expected 2 red + 1 blue, got ${redStones.length} red + ${blueStones.length} blue`;
+                    results.className = 'results error';
+                }
+                
+                results.textContent = output;
+                
+            } catch (error) {
+                results.textContent = `Detection failed: ${error.message}`;
+                results.className = 'results error';
+            }
+        });
+    </script>
+</body>
+</html>

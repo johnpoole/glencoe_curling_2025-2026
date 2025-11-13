@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Stone Detection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-output {
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            min-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+        button {
+            background-color: #4aa3ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #3a93ef;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.running {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .hidden {
+            display: none;
+        }
+        .file-info {
+            background: #e3f2fd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #2196f3;
+        }
+    </style>
+    <!-- Load D3.js for dependencies -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Photo Stone Detection Test Runner</h1>
+        
+        <div class="file-info">
+            <strong>Test Image:</strong> test_images/curling_house_test.jpg<br>
+            <small>Make sure you've replaced the dummy file with your actual test image!</small>
+        </div>
+
+        <div class="controls">
+            <button id="runTestBtn" onclick="runTest()">🚀 Run Photo Detection Test</button>
+            <button id="clearOutputBtn" onclick="clearOutput()">🧹 Clear Output</button>
+            <button id="runRealTestBtn" onclick="runRealImageTest()">📸 Test with Real Image Upload</button>
+        </div>
+
+        <div id="testStatus" class="status hidden"></div>
+        
+        <h3>Test Output:</h3>
+        <div id="testOutput" class="test-output">Click "Run Photo Detection Test" to start testing...\n</div>
+
+        <!-- Hidden elements needed for PhotoStoneDetection -->
+        <div style="display: none;">
+            <div id="photoUploadArea"></div>
+            <input type="file" id="photoInput" accept="image/*">
+            <canvas id="photoCanvas"></canvas>
+            <div id="photoControls"></div>
+            <button id="detectStonesBtn">Detect Stones</button>
+            <button id="clearPhotoBtn">Clear Photo</button>
+            <div id="detectionStatus"></div>
+            <div id="uploadPrompt"></div>
+            <svg id="rink"></svg>
+        </div>
+    </div>
+
+    <!-- Include the modules -->
+    <script type="module">
+        import PhotoStoneDetection from '../js/PhotoStoneDetection.js';
+        import GameController from '../js/models/GameController.js';
+        import SheetRenderer from '../js/models/SheetRenderer.js';
+        import SheetDimensions from '../js/models/SheetDimensions.js';
+        import UIManager from '../js/models/UIManager.js';
+
+        // Make modules available globally for the test
+        window.PhotoStoneDetection = PhotoStoneDetection;
+        window.GameController = GameController;
+        window.SheetRenderer = SheetRenderer;
+        window.SheetDimensions = SheetDimensions;
+        window.UIManager = UIManager;
+
+        // Override console.log to capture output
+        const testOutput = document.getElementById('testOutput');
+        const originalConsole = {
+            log: console.log,
+            error: console.error,
+            warn: console.warn
+        };
+
+        function logToOutput(message, type = 'log') {
+            // Add to visual output
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'warn' ? '⚠️' : 'ℹ️';
+            testOutput.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            testOutput.scrollTop = testOutput.scrollHeight;
+            
+            // Also log to browser console
+            originalConsole[type](message);
+        }
+
+        console.log = logToOutput;
+        console.error = (msg) => logToOutput(msg, 'error');
+        console.warn = (msg) => logToOutput(msg, 'warn');
+
+        window.logToOutput = logToOutput;
+    </script>
+
+    <script>
+        function setStatus(message, type) {
+            const statusEl = document.getElementById('testStatus');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.classList.remove('hidden');
+        }
+
+        function clearOutput() {
+            document.getElementById('testOutput').textContent = '';
+            document.getElementById('testStatus').classList.add('hidden');
+        }
+
+        async function runTest() {
+            const runBtn = document.getElementById('runTestBtn');
+            runBtn.disabled = true;
+            setStatus('Running automated test...', 'running');
+            
+            try {
+                logToOutput('🧪 Starting Automated Photo Stone Detection Test...');
+                logToOutput('');
+
+                // Create required dependencies
+                const sheetDimensions = new window.SheetDimensions();
+                logToOutput('✅ Sheet dimensions created');
+
+                // Set up mock SVG renderer
+                const svg = d3.select("#rink");
+                const renderer = new window.SheetRenderer(svg, sheetDimensions);
+                logToOutput('✅ Sheet renderer created');
+
+                // Create UI manager
+                const uiManager = new window.UIManager();
+                logToOutput('✅ UI manager created');
+
+                // Create game controller
+                const gameController = new window.GameController(renderer, uiManager.getUIGetters(), uiManager);
+                logToOutput('✅ Game controller created');
+
+                // Create PhotoStoneDetection instance
+                const photoDetection = new window.PhotoStoneDetection(gameController);
+                logToOutput('✅ PhotoStoneDetection instance created');
+
+                // Test basic functionality
+                logToOutput('');
+                logToOutput('🔍 Testing stone detection with mock data...');
+
+                // Create mock image data with some red and yellow regions
+                const mockImageData = {
+                    data: new Uint8ClampedArray(400 * 300 * 4),
+                    width: 400,
+                    height: 300
+                };
+
+                // Fill with mock stone colors
+                for (let i = 0; i < mockImageData.data.length; i += 4) {
+                    const pixel = i / 4;
+                    const x = pixel % 400;
+                    const y = Math.floor(pixel / 400);
+
+                    // Mock red stones
+                    if ((x > 100 && x < 120 && y > 100 && y < 120) || 
+                        (x > 200 && x < 220 && y > 150 && y < 170)) {
+                        mockImageData.data[i] = 255;     // Red
+                        mockImageData.data[i + 1] = 50;  // Green  
+                        mockImageData.data[i + 2] = 50;  // Blue
+                        mockImageData.data[i + 3] = 255; // Alpha
+                    }
+                    // Mock yellow stones
+                    else if ((x > 150 && x < 170 && y > 120 && y < 140) || 
+                             (x > 250 && x < 270 && y > 180 && y < 200)) {
+                        mockImageData.data[i] = 255;     // Red
+                        mockImageData.data[i + 1] = 255; // Green
+                        mockImageData.data[i + 2] = 50;  // Blue
+                        mockImageData.data[i + 3] = 255; // Alpha
+                    }
+                }
+
+                // Mock canvas context
+                photoDetection.canvas = { width: 400, height: 300 };
+                photoDetection.ctx = { getImageData: () => mockImageData };
+
+                // Test stone detection
+                const stones = await photoDetection.performStoneDetection();
+                logToOutput(`✅ Stone detection completed. Found ${stones.length} stones:`);
+                
+                stones.forEach((stone, index) => {
+                    logToOutput(`  Stone ${index + 1}: Team=${stone.team}, Position=(${stone.x}, ${stone.y})`);
+                });
+
+                // Test coordinate conversion
+                if (stones.length > 0) {
+                    logToOutput('');
+                    logToOutput('🎯 Testing coordinate conversion...');
+                    
+                    const testStone = stones[0];
+                    const sheetPos = photoDetection.convertToSheetCoordinates(testStone.x, testStone.y);
+                    logToOutput(`✅ Converted pixel (${testStone.x}, ${testStone.y}) to sheet (${sheetPos.x.toFixed(2)}, ${sheetPos.y.toFixed(2)})`);
+                }
+
+                logToOutput('');
+                logToOutput('🎉 All automated tests completed successfully!');
+                setStatus('✅ Test completed successfully!', 'success');
+
+            } catch (error) {
+                logToOutput(`❌ Test failed: ${error.message}`);
+                logToOutput(`Stack trace: ${error.stack}`);
+                setStatus('❌ Test failed - check output for details', 'error');
+            } finally {
+                runBtn.disabled = false;
+            }
+        }
+
+        async function runRealImageTest() {
+            setStatus('Ready for real image test - use the photo detection panel below', 'running');
+            logToOutput('');
+            logToOutput('📸 Real Image Test Mode');
+            logToOutput('Instructions:');
+            logToOutput('1. Replace test_images/curling_house_test.jpg with your actual test image');
+            logToOutput('2. Open the main application (index.html) in another tab');
+            logToOutput('3. Use the Photo Stone Detection section to upload your image');
+            logToOutput('4. Check browser console for detailed logs');
+            logToOutput('');
+            logToOutput('Or create a file input below to test directly:');
+            
+            // Create a file input for direct testing
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.style.margin = '10px 0';
+            
+            fileInput.onchange = async (e) => {
+                if (e.target.files.length > 0) {
+                    logToOutput(`📁 Selected file: ${e.target.files[0].name}`);
+                    logToOutput('🔄 Processing image...');
+                    
+                    try {
+                        // Set up the photo detection system
+                        const sheetDimensions = new window.SheetDimensions();
+                        const svg = d3.select("#rink");
+                        const renderer = new window.SheetRenderer(svg, sheetDimensions);
+                        const uiManager = new window.UIManager();
+                        const gameController = new window.GameController(renderer, uiManager.getUIGetters(), uiManager);
+                        const photoDetection = new window.PhotoStoneDetection(gameController);
+                        
+                        // Process the real image file
+                        await photoDetection.handleFileUpload(e.target.files[0]);
+                        logToOutput('✅ Image loaded successfully');
+                        
+                        const stones = await photoDetection.performStoneDetection();
+                        logToOutput(`🔍 Detection complete: Found ${stones.length} potential stones`);
+                        
+                        setStatus(`✅ Real image test complete - found ${stones.length} stones`, 'success');
+                        
+                    } catch (error) {
+                        logToOutput(`❌ Real image test failed: ${error.message}`);
+                        setStatus('❌ Real image test failed', 'error');
+                    }
+                }
+            };
+            
+            // Add the file input to the page
+            const controls = document.querySelector('.controls');
+            controls.appendChild(document.createElement('br'));
+            const label = document.createElement('label');
+            label.textContent = 'Select test image: ';
+            label.appendChild(fileInput);
+            controls.appendChild(label);
+        }
+    </script>
+</body>
+</html>

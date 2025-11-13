@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Image Analysis Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .output {
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            min-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        button {
+            background-color: #4aa3ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #3a93ef;
+        }
+        .image-display {
+            display: flex;
+            gap: 20px;
+        }
+        .image-container {
+            flex: 1;
+        }
+        .analysis-canvas {
+            border: 2px solid #ddd;
+            max-width: 100%;
+        }
+        .coordinates-display {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Real Curling Image Analysis</h1>
+        <p>This tool analyzes your actual curling house image to understand why stone detection isn't accurate.</p>
+        
+        <div>
+            <input type="file" id="imageInput" accept="image/*" />
+            <button onclick="analyzeImage()">📸 Analyze Image</button>
+            <button onclick="clearOutput()">🧹 Clear</button>
+        </div>
+        
+        <div id="output" class="output">Select an image file and click "Analyze Image" to start...</div>
+    </div>
+
+    <div class="container">
+        <h2>📊 Visual Analysis</h2>
+        <div class="image-display">
+            <div class="image-container">
+                <h3>Original Image</h3>
+                <canvas id="originalCanvas" class="analysis-canvas"></canvas>
+            </div>
+            <div class="image-container">
+                <h3>Detected Regions</h3>
+                <canvas id="detectionCanvas" class="analysis-canvas"></canvas>
+            </div>
+        </div>
+        
+        <div id="coordinatesDisplay" class="coordinates-display" style="display: none;">
+            <h3>Coordinate Mapping</h3>
+            <div id="coordinatesList"></div>
+        </div>
+    </div>
+
+    <script src="../js/ImprovedPhotoDetection.js"></script>
+    <script>
+        const output = document.getElementById('output');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const detectionCanvas = document.getElementById('detectionCanvas');
+        const originalCtx = originalCanvas.getContext('2d');
+        const detectionCtx = detectionCanvas.getContext('2d');
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            output.textContent += `[${timestamp}] ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+            console.log(message);
+        }
+
+        function clearOutput() {
+            output.textContent = '';
+        }
+
+        async function analyzeImage() {
+            const fileInput = document.getElementById('imageInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                log('❌ Please select an image file first');
+                return;
+            }
+
+            log(`📁 Loading image: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
+            
+            try {
+                // Load and display the image
+                const img = await loadImage(file);
+                log(`✅ Image loaded: ${img.width} x ${img.height} pixels`);
+                
+                // Display original image
+                displayOriginalImage(img);
+                
+                // Analyze the image
+                const analyzer = createImageAnalyzer();
+                const analysis = await analyzer.analyzeImage(file);
+                
+                displayAnalysisResults(analysis);
+                visualizeDetection(img, analysis);
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function displayOriginalImage(img) {
+            // Scale image to fit canvas
+            const maxWidth = 400;
+            const maxHeight = 300;
+            const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+            
+            originalCanvas.width = img.width * scale;
+            originalCanvas.height = img.height * scale;
+            
+            originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+            originalCtx.drawImage(img, 0, 0, originalCanvas.width, originalCanvas.height);
+        }
+
+        function displayAnalysisResults(analysis) {
+            log('');
+            log('📊 DETAILED IMAGE ANALYSIS');
+            log('='.repeat(50));
+            log(`Image Size: ${analysis.dimensions.width} x ${analysis.dimensions.height} pixels`);
+            log(`Average Color: RGB(${analysis.averageColor.r}, ${analysis.averageColor.g}, ${analysis.averageColor.b})`);
+            log('');
+
+            // Red stone analysis
+            log(`🔴 RED STONE ANALYSIS:`);
+            log(`  Potential red pixels found: ${analysis.colorRanges.red.samples.length}`);
+            if (analysis.colorRanges.red.samples.length > 0) {
+                const red = analysis.colorRanges.red;
+                log(`  Color range: R(${red.min.r}-${red.max.r}) G(${red.min.g}-${red.max.g}) B(${red.min.b}-${red.max.b})`);
+                log(`  Sample positions:`);
+                red.samples.slice(0, 10).forEach((sample, i) => {
+                    log(`    ${i+1}. (${sample.x}, ${sample.y}) RGB(${sample.r}, ${sample.g}, ${sample.b})`);
+                });
+                if (red.samples.length > 10) {
+                    log(`    ... and ${red.samples.length - 10} more`);
+                }
+            } else {
+                log(`  ⚠️ No red regions detected - try adjusting detection criteria`);
+            }
+
+            log('');
+            
+            // Yellow stone analysis
+            log(`🟡 YELLOW STONE ANALYSIS:`);
+            log(`  Potential yellow pixels found: ${analysis.colorRanges.yellow.samples.length}`);
+            if (analysis.colorRanges.yellow.samples.length > 0) {
+                const yellow = analysis.colorRanges.yellow;
+                log(`  Color range: R(${yellow.min.r}-${yellow.max.r}) G(${yellow.min.g}-${yellow.max.g}) B(${yellow.min.b}-${yellow.max.b})`);
+                log(`  Sample positions:`);
+                yellow.samples.slice(0, 10).forEach((sample, i) => {
+                    log(`    ${i+1}. (${sample.x}, ${sample.y}) RGB(${sample.r}, ${sample.g}, ${sample.b})`);
+                });
+                if (yellow.samples.length > 10) {
+                    log(`    ... and ${yellow.samples.length - 10} more`);
+                }
+            } else {
+                log(`  ⚠️ No yellow regions detected - try adjusting detection criteria`);
+            }
+
+            log('');
+            log(`💡 LIGHTING ANALYSIS:`);
+            log(`  Brightest pixels: ${analysis.brightestPixels.length}`);
+            if (analysis.brightestPixels.length > 0) {
+                const brightest = analysis.brightestPixels[0];
+                log(`    Brightest: (${brightest.x}, ${brightest.y}) RGB(${brightest.r}, ${brightest.g}, ${brightest.b}) brightness=${brightest.brightness}`);
+            }
+            
+            log(`  Darkest pixels: ${analysis.darkestPixels.length}`);
+            if (analysis.darkestPixels.length > 0) {
+                const darkest = analysis.darkestPixels[0];
+                log(`    Darkest: (${darkest.x}, ${darkest.y}) RGB(${darkest.r}, ${darkest.g}, ${darkest.b}) brightness=${darkest.brightness}`);
+            }
+
+            log('');
+            log(`🎯 RECOMMENDATIONS:`);
+            
+            if (analysis.colorRanges.red.samples.length === 0) {
+                log(`  - Red detection: Try lowering red thresholds or check if stones are more orange/pink`);
+            }
+            
+            if (analysis.colorRanges.yellow.samples.length === 0) {
+                log(`  - Yellow detection: Try adjusting for more orange/gold tones`);
+            }
+            
+            if (analysis.brightestPixels.length > analysis.colorRanges.red.samples.length + analysis.colorRanges.yellow.samples.length) {
+                log(`  - Lighting: Image may have overexposed areas affecting detection`);
+            }
+            
+            log(`  - Consider manual color calibration based on the detected ranges above`);
+            
+        }
+
+        function visualizeDetection(img, analysis) {
+            // Set up detection canvas
+            const scale = Math.min(400 / img.width, 300 / img.height, 1);
+            detectionCanvas.width = img.width * scale;
+            detectionCanvas.height = img.height * scale;
+            
+            // Draw original image as background
+            detectionCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+            detectionCtx.drawImage(img, 0, 0, detectionCanvas.width, detectionCanvas.height);
+            
+            // Overlay detected regions
+            detectionCtx.globalAlpha = 0.7;
+            
+            // Draw red regions
+            detectionCtx.fillStyle = 'red';
+            analysis.colorRanges.red.samples.forEach(sample => {
+                const x = sample.x * scale;
+                const y = sample.y * scale;
+                detectionCtx.fillRect(x - 2, y - 2, 4, 4);
+            });
+            
+            // Draw yellow regions  
+            detectionCtx.fillStyle = 'yellow';
+            analysis.colorRanges.yellow.samples.forEach(sample => {
+                const x = sample.x * scale;
+                const y = sample.y * scale;
+                detectionCtx.fillRect(x - 2, y - 2, 4, 4);
+            });
+            
+            detectionCtx.globalAlpha = 1.0;
+            
+            // Group nearby detections into stone candidates
+            const stoneRegions = groupDetections(analysis);
+            log('');
+            log(`🎯 STONE CANDIDATES:`);
+            log(`Found ${stoneRegions.red.length} red stone candidates and ${stoneRegions.yellow.length} yellow stone candidates`);
+            
+            // Draw stone candidate circles
+            detectionCtx.strokeStyle = 'lime';
+            detectionCtx.lineWidth = 2;
+            
+            stoneRegions.red.forEach((region, i) => {
+                const x = region.center.x * scale;
+                const y = region.center.y * scale;
+                detectionCtx.beginPath();
+                detectionCtx.arc(x, y, 15, 0, 2 * Math.PI);
+                detectionCtx.stroke();
+                
+                detectionCtx.fillStyle = 'white';
+                detectionCtx.fillText(`R${i+1}`, x + 20, y);
+                
+                log(`  Red Stone ${i+1}: Center(${region.center.x}, ${region.center.y}) with ${region.pixelCount} pixels`);
+            });
+            
+            stoneRegions.yellow.forEach((region, i) => {
+                const x = region.center.x * scale;
+                const y = region.center.y * scale;
+                detectionCtx.beginPath();
+                detectionCtx.arc(x, y, 15, 0, 2 * Math.PI);
+                detectionCtx.stroke();
+                
+                detectionCtx.fillStyle = 'white';
+                detectionCtx.fillText(`Y${i+1}`, x + 20, y + 15);
+                
+                log(`  Yellow Stone ${i+1}: Center(${region.center.x}, ${region.center.y}) with ${region.pixelCount} pixels`);
+            });
+            
+            // Show coordinate mapping
+            showCoordinateMapping(stoneRegions, analysis.dimensions);
+        }
+
+        function groupDetections(analysis) {
+            const groupRadius = 50; // pixels
+            
+            const groupPixels = (pixels) => {
+                const regions = [];
+                const used = new Set();
+                
+                pixels.forEach((pixel, i) => {
+                    if (used.has(i)) return;
+                    
+                    const region = {
+                        center: { x: pixel.x, y: pixel.y },
+                        pixels: [pixel],
+                        pixelCount: 1
+                    };
+                    
+                    // Find nearby pixels
+                    pixels.forEach((otherPixel, j) => {
+                        if (i !== j && !used.has(j)) {
+                            const distance = Math.hypot(pixel.x - otherPixel.x, pixel.y - otherPixel.y);
+                            if (distance <= groupRadius) {
+                                region.pixels.push(otherPixel);
+                                used.add(j);
+                                region.pixelCount++;
+                            }
+                        }
+                    });
+                    
+                    // Calculate center of mass
+                    let sumX = 0, sumY = 0;
+                    region.pixels.forEach(p => {
+                        sumX += p.x;
+                        sumY += p.y;
+                    });
+                    region.center.x = Math.round(sumX / region.pixels.length);
+                    region.center.y = Math.round(sumY / region.pixels.length);
+                    
+                    if (region.pixelCount >= 3) { // Minimum pixels for a stone
+                        regions.push(region);
+                    }
+                    
+                    used.add(i);
+                });
+                
+                return regions.sort((a, b) => b.pixelCount - a.pixelCount);
+            };
+            
+            return {
+                red: groupPixels(analysis.colorRanges.red.samples),
+                yellow: groupPixels(analysis.colorRanges.yellow.samples)
+            };
+        }
+
+        function showCoordinateMapping(stoneRegions, imageDimensions) {
+            const coordDisplay = document.getElementById('coordinatesDisplay');
+            const coordList = document.getElementById('coordinatesList');
+            
+            let html = '<h4>Pixel to Sheet Coordinate Mapping:</h4>';
+            
+            // Mock sheet dimensions for mapping
+            const TEE_X = 28.35; // meters
+            const imageAreaWidth = 6.0; // assume 6m x 6m view
+            const imageAreaHeight = 6.0;
+            
+            const mapToSheet = (pixelX, pixelY) => {
+                const normalizedX = (pixelX / imageDimensions.width - 0.5) * 2;
+                const normalizedY = (pixelY / imageDimensions.height - 0.5) * 2;
+                
+                return {
+                    x: TEE_X + normalizedX * imageAreaWidth / 2,
+                    y: 0 + normalizedY * imageAreaHeight / 2
+                };
+            };
+            
+            stoneRegions.red.forEach((region, i) => {
+                const sheet = mapToSheet(region.center.x, region.center.y);
+                html += `<div>🔴 Red Stone ${i+1}: Pixel(${region.center.x}, ${region.center.y}) → Sheet(${sheet.x.toFixed(2)}m, ${sheet.y.toFixed(2)}m)</div>`;
+            });
+            
+            stoneRegions.yellow.forEach((region, i) => {
+                const sheet = mapToSheet(region.center.x, region.center.y);
+                html += `<div>🟡 Yellow Stone ${i+1}: Pixel(${region.center.x}, ${region.center.y}) → Sheet(${sheet.x.toFixed(2)}m, ${sheet.y.toFixed(2)}m)</div>`;
+            });
+            
+            coordList.innerHTML = html;
+            coordDisplay.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
